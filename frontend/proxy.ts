@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 
-export async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   const response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -68,7 +68,10 @@ export async function middleware(request: NextRequest) {
         .eq("id", user.id)
         .single()
 
-      // If profile exists and role is not superadmin, update it
+      if (fetchError) {
+        console.error("Error fetching profile for SuperAdmin check:", fetchError)
+      }
+
       if (profile && profile.role !== "superadmin") {
         const { error: updateError } = await supabase
           .from("profiles")
@@ -79,7 +82,6 @@ export async function middleware(request: NextRequest) {
           console.error("Error updating SuperAdmin role:", updateError)
         }
       }
-      // If profile doesn't exist yet, it will be created by the trigger with correct role
     } catch (error) {
       console.error("Error ensuring SuperAdmin role:", error)
     }
@@ -88,16 +90,19 @@ export async function middleware(request: NextRequest) {
   // Get user role from profile
   let userRole = "student"
   try {
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single()
 
+    if (profileError) {
+      console.error("Error fetching user profile role:", profileError)
+    }
+
     userRole = profile?.role || "student"
   } catch (error) {
-    // If profile doesn't exist, default to student
-    console.error("Error fetching user profile:", error)
+    console.error("Unexpected error fetching user profile:", error)
     userRole = "student"
   }
 
@@ -111,7 +116,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Protect /dashboard, /courses, /question, /notifications, and /profile routes - students, admins, and superadmins allowed
+  // Protect additional routes - students, admins, and superadmins allowed
   if (
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/courses") ||
@@ -133,3 +138,4 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.svg).*)"],
 }
+
