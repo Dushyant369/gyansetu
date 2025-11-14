@@ -15,6 +15,7 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/date"
 import { QuestionVoting } from "@/components/question/question-voting"
 import { ReportButton } from "@/components/question/report-button"
 import { QuestionActions } from "@/components/question/question-actions"
+import { MarkResolvedButton } from "@/components/question/mark-resolved-button"
 
 export default async function QuestionPage({
   params,
@@ -43,6 +44,11 @@ export default async function QuestionPage({
     )
     .eq("id", questionId)
     .single()
+
+  // Ensure resolved field exists (fallback to is_resolved for backward compatibility)
+  if (question && question.resolved === undefined && question.is_resolved !== undefined) {
+    question.resolved = question.is_resolved
+  }
 
   const bestAnswerId = question?.best_answer_id || null
 
@@ -154,7 +160,7 @@ export default async function QuestionPage({
             <div className="space-y-4">
               <div className="flex justify-between items-start gap-4">
                 <h1 className="text-2xl font-bold text-foreground">{question.title}</h1>
-                {question.is_resolved && (
+                {(question.resolved || question.is_resolved) && (
                   <Badge className="bg-green-500/20 text-green-700 dark:text-green-400">Resolved</Badge>
                 )}
               </div>
@@ -223,6 +229,14 @@ export default async function QuestionPage({
                     </>
                   )}
                 </div>
+              </div>
+              {/* Mark as Resolved Button for Admins/SuperAdmins */}
+              <div className="pt-2">
+                <MarkResolvedButton
+                  questionId={questionId}
+                  isResolved={question.resolved || false}
+                  currentUserRole={currentUserRole}
+                />
               </div>
             </div>
           </Card>

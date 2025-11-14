@@ -726,3 +726,41 @@ export async function markBestAnswer(answerId: string, questionId: string) {
   return { isBestAnswer: true }
 }
 
+export async function markAsResolved(questionId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/auth/login")
+  }
+
+  // Get user role
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+  const userRole = profile?.role || "student"
+
+  // Only admins and superadmins can mark as resolved
+  if (userRole !== "admin" && userRole !== "superadmin") {
+    throw new Error("Only admins and superadmins can mark questions as resolved")
+  }
+
+  // Get current resolved status
+  const { data: question } = await supabase.from("questions").select("resolved").eq("id", questionId).single()
+
+  if (!question) {
+    throw new Error("Question not found")
+  }
+
+  const newResolvedStatus = !question.resolved
+
+  const { error } = await supabase.from("questions").update({ resolved: newResolvedStatus }).eq("id", questionId)
+
+  if (error) {
+    throw new Error(error.message || "Failed to update resolved status")
+  }
+
+  revalidatePath(`/question/${questionId}`)
+  return { resolved: newResolvedStatus }
+}
+

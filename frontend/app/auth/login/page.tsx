@@ -11,10 +11,12 @@ import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { Eye, EyeOff } from "lucide-react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({})
@@ -128,24 +130,35 @@ export default function LoginPage() {
               <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
                 Password
               </label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => {
-                  if (fieldErrors.password) {
-                    setFieldErrors((prev) => ({ ...prev, password: undefined }))
-                  }
-                  setPassword(e.target.value)
-                }}
-                placeholder="••••••••"
-                required
-                disabled={loading}
-                className={cn(
-                  fieldErrors.password && "border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500"
-                )}
-                aria-invalid={!!fieldErrors.password}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => {
+                    if (fieldErrors.password) {
+                      setFieldErrors((prev) => ({ ...prev, password: undefined }))
+                    }
+                    setPassword(e.target.value)
+                  }}
+                  placeholder="••••••••"
+                  required
+                  disabled={loading}
+                  className={cn(
+                    "pr-10",
+                    fieldErrors.password && "border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500"
+                  )}
+                  aria-invalid={!!fieldErrors.password}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  disabled={loading}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {fieldErrors.password && <p className="text-red-500 text-sm mt-1">{fieldErrors.password}</p>}
             </div>
 
