@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Tooltip,
   TooltipContent,
@@ -30,30 +31,52 @@ interface ManageUsersProps {
 const USERS_PER_PAGE = 10
 
 export function ManageUsers({ currentUserId, currentUserRole }: ManageUsersProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
   const [isPaginating, startPaginateTransition] = useTransition()
-  const [currentPage, setCurrentPage] = useState(1)
   const { toast } = useToast()
+
+  // Get search and page from URL params
+  const searchTerm = searchParams.get("search") || ""
+  const currentPage = Number(searchParams.get("page") || 1)
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
+        setLoading(true)
         const supabase = createClient()
-        const { data, error } = await supabase
+        
+        // Build query with server-side filtering
+        let query = supabase
           .from("profiles")
-          .select("id, display_name, email, role, created_at")
+          .select("id, display_name, email, role, created_at", { count: "exact" })
           .order("created_at", { ascending: false })
+
+        // Apply role filter based on current user role
+        if (currentUserRole !== "superadmin") {
+          query = query.eq("role", "student")
+        }
+
+        // Apply search filter if search term exists
+        if (searchTerm.trim()) {
+          query = query.or(`email.ilike.%${searchTerm}%,display_name.ilike.%${searchTerm}%,role.ilike.%${searchTerm}%`)
+        }
+
+        // Apply pagination
+        const offset = (currentPage - 1) * USERS_PER_PAGE
+        query = query.range(offset, offset + USERS_PER_PAGE - 1)
+
+        const { data, error, count } = await query
 
         if (error) {
           throw error
         }
 
         setUsers(data || [])
-        setFilteredUsers(data || [])
+        setTotalCount(count || 0)
       } catch (err) {
         toast({
           title: "Error",
@@ -66,52 +89,36 @@ export function ManageUsers({ currentUserId, currentUserRole }: ManageUsersProps
     }
 
     fetchUsers()
-  }, [toast])
+  }, [searchTerm, currentPage, currentUserRole, toast])
 
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredUsers(users)
-      setCurrentPage(1)
-      return
-    }
+  const [totalCount, setTotalCount] = useState(0)
 
-    const term = searchTerm.toLowerCase()
-    const filtered = users.filter(
-      (user) =>
-        user.email.toLowerCase().includes(term) ||
-        (user.display_name && user.display_name.toLowerCase().includes(term))
-    )
-    setFilteredUsers(filtered)
-    setCurrentPage(1)
-  }, [searchTerm, users])
+  // Users are already filtered server-side, so use them directly
+  const visibleUsers = users
 
-  const visibleUsers = useMemo(() => {
-    return filteredUsers.filter((user) => {
-      if (currentUserRole === "superadmin") {
-        return true
-      }
-      return user.role === "student"
-    })
-  }, [filteredUsers, currentUserRole])
-
-  const totalUsers = visibleUsers.length
+  const totalUsers = totalCount
   const totalPages = Math.max(1, Math.ceil(totalUsers / USERS_PER_PAGE))
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages)
-    }
-  }, [currentPage, totalPages])
-
-  const paginatedUsers = useMemo(() => {
-    const safePage = Math.min(currentPage, totalPages)
-    const startIndex = (safePage - 1) * USERS_PER_PAGE
-    return visibleUsers.slice(startIndex, startIndex + USERS_PER_PAGE)
-  }, [visibleUsers, currentPage, totalPages])
 
   const safePage = Math.min(currentPage, totalPages)
   const startEntry = totalUsers === 0 ? 0 : (safePage - 1) * USERS_PER_PAGE + 1
   const endEntry = totalUsers === 0 ? 0 : Math.min(startEntry + USERS_PER_PAGE - 1, totalUsers)
+
+  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const search = formData.get("search") as string
+    const params = new URLSearchParams()
+    if (search) params.set("search", search)
+    params.set("page", "1")
+    router.push(`/admin?${params.toString()}#users`)
+  }
+
+  const handlePageChange = (newPage: number) => {
+    const params = new URLSearchParams()
+    if (searchTerm) params.set("search", searchTerm)
+    params.set("page", newPage.toString())
+    router.push(`/admin?${params.toString()}#users`)
+  }
 
   const handleRoleChange = async (userId: string, currentRole: string) => {
     // Determine new role based on current role
@@ -135,9 +142,6 @@ export function ManageUsers({ currentUserId, currentUserRole }: ManageUsersProps
 
         // Update local state
         setUsers((prev) =>
-          prev.map((user) => (user.id === userId ? { ...user, role: newRole } : user))
-        )
-        setFilteredUsers((prev) =>
           prev.map((user) => (user.id === userId ? { ...user, role: newRole } : user))
         )
       } catch (err) {
@@ -173,12 +177,12 @@ export function ManageUsers({ currentUserId, currentUserRole }: ManageUsersProps
         </div>
 
         {/* Search Bar */}
-        <div className="relative">
+        <form onSubmit={handleSearch} className="relative">
           <Input
             type="text"
-            placeholder="Search by name or email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            name="search"
+            placeholder="Search by name, email, or role..."
+            defaultValue={searchTerm}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
           />
           <svg
@@ -194,7 +198,7 @@ export function ManageUsers({ currentUserId, currentUserRole }: ManageUsersProps
               d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
             />
           </svg>
-        </div>
+        </form>
 
         {/* Users Table */}
         <div className="overflow-x-auto">
@@ -215,7 +219,7 @@ export function ManageUsers({ currentUserId, currentUserRole }: ManageUsersProps
                   </td>
                 </tr>
               ) : (
-                paginatedUsers.map((user, index) => {
+                visibleUsers.map((user, index) => {
                     const isCurrentUser = user.id === currentUserId
                     const isSuperAdmin = user.role === "superadmin"
                     const isAdmin = user.role === "admin"
@@ -353,7 +357,7 @@ export function ManageUsers({ currentUserId, currentUserRole }: ManageUsersProps
                 size="sm"
                 onClick={() =>
                   startPaginateTransition(() => {
-                    setCurrentPage((prev) => Math.max(1, prev - 1))
+                    handlePageChange(Math.max(1, safePage - 1))
                   })
                 }
                 disabled={safePage === 1 || isPaginating}
@@ -369,7 +373,7 @@ export function ManageUsers({ currentUserId, currentUserRole }: ManageUsersProps
                 size="sm"
                 onClick={() =>
                   startPaginateTransition(() => {
-                    setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                    handlePageChange(Math.min(totalPages, safePage + 1))
                   })
                 }
                 disabled={safePage === totalPages || isPaginating}

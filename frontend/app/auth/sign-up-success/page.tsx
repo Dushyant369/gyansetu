@@ -43,7 +43,9 @@ export default function SignUpSuccessPage() {
 
     try {
       const supabase = createClient()
-      const redirectUrl = `${window.location.origin}/auth/callback`
+      // Use environment variable if available, otherwise fall back to window.location.origin
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+      const redirectUrl = `${appUrl}/auth/callback`
       
       const { error } = await supabase.auth.resend({
         type: "signup",

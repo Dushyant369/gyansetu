@@ -1,23 +1,60 @@
-import { createClient } from "@/lib/supabase/server"
+"use client"
+
+import { useState, useEffect, useMemo } from "react"
+import { createClient } from "@/lib/supabase/client"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Trophy, Medal, Award } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Trophy, Medal, Award, ChevronLeft, ChevronRight } from "lucide-react"
 
 interface KarmaLeaderboardProps {
   currentUserId: string
+  usersPerPage?: number
 }
 
-export async function KarmaLeaderboard({ currentUserId }: KarmaLeaderboardProps) {
-  const supabase = await createClient()
+const USERS_PER_PAGE = 5
 
-  // Fetch top 5 users by karma
-  const { data: topUsers, error } = await supabase
-    .from("profiles")
-    .select("id, display_name, email, role, karma_points")
-    .order("karma_points", { ascending: false })
-    .limit(5)
+export function KarmaLeaderboard({ currentUserId, usersPerPage = USERS_PER_PAGE }: KarmaLeaderboardProps) {
+  const [topUsers, setTopUsers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
 
-  if (error || !topUsers || topUsers.length === 0) {
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, display_name, email, role, karma_points")
+          .order("karma_points", { ascending: false })
+
+        if (error) throw error
+        setTopUsers(data || [])
+      } catch (error) {
+        console.error("Error fetching karma leaderboard:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUsers()
+  }, [])
+
+  const totalPages = Math.ceil(topUsers.length / usersPerPage)
+  const startIndex = (currentPage - 1) * usersPerPage
+  const endIndex = startIndex + usersPerPage
+  const paginatedUsers = useMemo(() => topUsers.slice(startIndex, endIndex), [topUsers, startIndex, endIndex])
+
+  if (loading) {
+    return (
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4">Top Contributors</h3>
+        <p className="text-sm text-muted-foreground text-center py-4">Loading...</p>
+      </Card>
+    )
+  }
+
+  if (!topUsers || topUsers.length === 0) {
     return (
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">Top Contributors</h3>
@@ -70,7 +107,8 @@ export async function KarmaLeaderboard({ currentUserId }: KarmaLeaderboardProps)
         </div>
 
         <div className="space-y-2 max-h-[400px] overflow-y-auto">
-          {topUsers.map((user, index) => {
+          {paginatedUsers.map((user, index) => {
+            const globalIndex = startIndex + index
             const isCurrentUser = user.id === currentUserId
             return (
               <div
@@ -83,7 +121,7 @@ export async function KarmaLeaderboard({ currentUserId }: KarmaLeaderboardProps)
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex-shrink-0">{getRankIcon(index)}</div>
+                    <div className="flex-shrink-0">{getRankIcon(globalIndex)}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <p
@@ -110,6 +148,40 @@ export async function KarmaLeaderboard({ currentUserId }: KarmaLeaderboardProps)
             )
           })}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {startIndex + 1} to {Math.min(endIndex, topUsers.length)} of {topUsers.length} users
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="gap-2"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Previous
+              </Button>
+              <div className="text-sm text-muted-foreground px-4">
+                Page {currentPage} of {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="gap-2"
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </Card>
   )

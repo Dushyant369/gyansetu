@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { createCourse, updateCourse, deleteCourse } from "@/app/admin/actions"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,17 +59,20 @@ interface Course {
 }
 
 interface CourseManagementProps {
-  courses: Course[]
+  courses?: Course[] // Optional, not used anymore but kept for backward compatibility
   adminUsers: Array<{ id: string; display_name: string | null; email: string }>
 }
 
-const COURSES_PER_PAGE = 8
+const COURSES_PER_PAGE = 10
 const UNASSIGNED_VALUE = "none"
 
-export function CourseManagement({ courses: initialCourses, adminUsers }: CourseManagementProps) {
-  const [courses, setCourses] = useState(initialCourses)
+export function CourseManagement({ adminUsers }: CourseManagementProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [courses, setCourses] = useState<Course[]>([])
+  const [loading, setLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
-  const [isFiltering, startFilteringTransition] = useTransition()
+  const [isPaginating, startPaginateTransition] = useTransition()
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [editingCourse, setEditingCourse] = useState<Course | null>(null)
@@ -75,42 +80,94 @@ export function CourseManagement({ courses: initialCourses, adminUsers }: Course
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [assignedTo, setAssignedTo] = useState<string>(UNASSIGNED_VALUE)
   const [editAssignedTo, setEditAssignedTo] = useState<string>(UNASSIGNED_VALUE)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [currentPage, setCurrentPage] = useState(1)
   const { toast } = useToast()
 
-  const filteredCourses = useMemo(() => {
-    if (!searchTerm.trim()) {
-      return courses
-    }
-
-    const term = searchTerm.trim().toLowerCase()
-    return courses.filter(
-      (course) =>
-        course.name.toLowerCase().includes(term) ||
-        course.code.toLowerCase().includes(term) ||
-        (course.semester ?? "").toLowerCase().includes(term)
-    )
-  }, [courses, searchTerm])
-
-  const totalCourses = filteredCourses.length
-  const totalPages = Math.max(1, Math.ceil(totalCourses / COURSES_PER_PAGE))
+  // Get search and page from URL params
+  const searchTerm = searchParams.get("search") || ""
+  const currentPage = Number(searchParams.get("page") || 1)
 
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages)
-    }
-  }, [currentPage, totalPages])
+    const fetchCourses = async () => {
+      try {
+        setLoading(true)
+        const supabase = createClient()
+        
+        // Build query with server-side filtering
+        let query = supabase
+          .from("courses")
+          .select("*", { count: "exact" })
+          .order("created_at", { ascending: false })
 
-  const paginatedCourses = useMemo(() => {
-    const safePage = Math.min(currentPage, totalPages)
-    const startIndex = (safePage - 1) * COURSES_PER_PAGE
-    return filteredCourses.slice(startIndex, startIndex + COURSES_PER_PAGE)
-  }, [filteredCourses, currentPage, totalPages])
+        // Apply search filter if search term exists
+        if (searchTerm.trim()) {
+          query = query.or(`name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%`)
+        }
+
+        // Apply pagination
+        const offset = (currentPage - 1) * COURSES_PER_PAGE
+        query = query.range(offset, offset + COURSES_PER_PAGE - 1)
+
+        const { data, error, count } = await query
+
+        if (error) {
+          throw error
+        }
+
+        // Fetch assigned admin info for each course
+        const coursesWithAdmins = await Promise.all(
+          (data || []).map(async (course) => {
+            if (course.assigned_to) {
+              const { data: adminProfile } = await supabase
+                .from("profiles")
+                .select("id, display_name, email")
+                .eq("id", course.assigned_to)
+                .single()
+              return { ...course, assigned_admin: adminProfile }
+            }
+            return { ...course, assigned_admin: null }
+          })
+        )
+
+        setCourses(coursesWithAdmins)
+        setTotalCount(count || 0)
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: err instanceof Error ? err.message : "Failed to fetch courses",
+          variant: "destructive",
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCourses()
+  }, [searchTerm, currentPage, toast])
+
+  const [totalCount, setTotalCount] = useState(0)
+  const totalCourses = totalCount
+  const totalPages = Math.max(1, Math.ceil(totalCourses / COURSES_PER_PAGE))
 
   const safePage = Math.min(currentPage, totalPages)
   const startEntry = totalCourses === 0 ? 0 : (safePage - 1) * COURSES_PER_PAGE + 1
   const endEntry = totalCourses === 0 ? 0 : Math.min(startEntry + COURSES_PER_PAGE - 1, totalCourses)
+
+  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const search = formData.get("search") as string
+    const params = new URLSearchParams()
+    if (search) params.set("search", search)
+    params.set("page", "1")
+    router.push(`/admin?${params.toString()}#courses`)
+  }
+
+  const handlePageChange = (newPage: number) => {
+    const params = new URLSearchParams()
+    if (searchTerm) params.set("search", searchTerm)
+    params.set("page", newPage.toString())
+    router.push(`/admin?${params.toString()}#courses`)
+  }
 
   const handleCreateCourse = async (formData: FormData) => {
     setError("")
@@ -317,16 +374,11 @@ export function CourseManagement({ courses: initialCourses, adminUsers }: Course
             <p className="text-sm text-muted-foreground">Manage existing courses</p>
           </div>
 
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <form onSubmit={handleSearch} className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <Input
-              placeholder="Search courses by name, code, or semester..."
-              value={searchTerm}
-              onChange={(event) =>
-                startFilteringTransition(() => {
-                  setSearchTerm(event.target.value)
-                  setCurrentPage(1)
-                })
-              }
+              name="search"
+              placeholder="Search courses by name or code..."
+              defaultValue={searchTerm}
               className="md:max-w-sm"
             />
             <div className="text-sm text-muted-foreground">
@@ -334,7 +386,7 @@ export function CourseManagement({ courses: initialCourses, adminUsers }: Course
                 ? "Showing 0 of 0 courses"
                 : `Showing ${startEntry}-${endEntry} of ${totalCourses} course${totalCourses === 1 ? "" : "s"}`}
             </div>
-          </div>
+          </form>
 
           {error && (
             <Alert className="bg-destructive/10 border-destructive/20">
@@ -347,27 +399,28 @@ export function CourseManagement({ courses: initialCourses, adminUsers }: Course
             </Alert>
           )}
 
-          {totalCourses === 0 ? (
-            <p className="text-muted-foreground text-center py-8">No courses yet. Create your first course above.</p>
+          {loading ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {Array.from({ length: COURSES_PER_PAGE }).map((_, index) => (
+                <Card key={index} className="p-4 space-y-3">
+                  <Skeleton className="h-5 w-1/2" />
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <div className="flex gap-2 pt-2">
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-9 w-24" />
+                  </div>
+                </Card>
+              ))}
+            </div>
+          ) : totalCourses === 0 ? (
+            <p className="text-muted-foreground text-center py-8">
+              {searchTerm ? "No courses found matching your search." : "No courses yet. Create your first course above."}
+            </p>
           ) : (
             <div className="space-y-4">
-              {isFiltering ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {Array.from({ length: COURSES_PER_PAGE }).map((_, index) => (
-                    <Card key={index} className="p-4 space-y-3">
-                      <Skeleton className="h-5 w-1/2" />
-                      <Skeleton className="h-4 w-1/3" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                      <div className="flex gap-2 pt-2">
-                        <Skeleton className="h-9 w-24" />
-                        <Skeleton className="h-9 w-24" />
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                paginatedCourses.map((course) => (
+              {courses.map((course) => (
                 <div key={course.id} className="flex justify-between items-start p-4 border border-border rounded-lg">
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -509,15 +562,14 @@ export function CourseManagement({ courses: initialCourses, adminUsers }: Course
                     </AlertDialog>
                   </div>
                 </div>
-                ))
-              )}
+              ))}
             </div>
           )}
 
           {totalPages > 1 && (
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-4 border-t border-border">
               <div className="text-sm text-muted-foreground">
-                Page {safePage} of {totalPages}
+                Showing {startEntry}-{endEntry} of {totalCourses} course{totalCourses !== 1 ? "s" : ""}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -525,24 +577,27 @@ export function CourseManagement({ courses: initialCourses, adminUsers }: Course
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    startFilteringTransition(() => {
-                      setCurrentPage((prev) => Math.max(1, prev - 1))
+                    startPaginateTransition(() => {
+                      handlePageChange(Math.max(1, safePage - 1))
                     })
                   }
-                  disabled={safePage === 1 || isFiltering}
+                  disabled={safePage === 1 || isPaginating}
                 >
                   Previous
                 </Button>
+                <span className="text-sm text-muted-foreground px-4">
+                  Page {safePage} of {totalPages}
+                </span>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    startFilteringTransition(() => {
-                      setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                    startPaginateTransition(() => {
+                      handlePageChange(Math.min(totalPages, safePage + 1))
                     })
                   }
-                  disabled={safePage === totalPages || isFiltering}
+                  disabled={safePage === totalPages || isPaginating}
                 >
                   Next
                 </Button>

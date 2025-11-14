@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { Card } from "@/components/ui/card"
-import { Plus, BookOpen, User, Settings } from "lucide-react"
+import { Plus, BookOpen, User, Settings, MessageSquare, HelpCircle, Lightbulb, CheckCircle2 } from "lucide-react"
 import { KarmaLeaderboard } from "@/components/dashboard/karma-leaderboard"
 
 export default async function DashboardPage() {
@@ -16,18 +16,46 @@ export default async function DashboardPage() {
     redirect("/auth/login")
   }
 
-  const { data: profile, error } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
 
-  const userProfile = profile || {
-    id: user.id,
-    email: user.email,
-    display_name: user.email?.split("@")[0] || "Student",
-    karma_points: 0,
-    role: "student",
+  const metadataDisplayName =
+    (typeof user.user_metadata?.display_name === "string" && user.user_metadata.display_name.trim()) ||
+    (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
+    (typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim()) ||
+    null
+
+  const resolvedDisplayName =
+    (profile?.display_name && profile.display_name.trim().length > 0 && profile.display_name.trim()) ||
+    metadataDisplayName ||
+    (user.email?.split("@")[0] ?? "Student")
+
+  const userProfile = {
+    id: profile?.id ?? user.id,
+    email: profile?.email ?? user.email ?? "",
+    display_name: resolvedDisplayName,
+    karma_points: profile?.karma_points ?? 0,
+    role: profile?.role ?? "student",
   }
 
   const isAdmin = userProfile.role === "admin" || userProfile.role === "superadmin"
   const isStudent = userProfile.role === "student"
+
+  // Check if this is first login and create welcome notification
+  const { data: existingWelcomeNotification } = await supabase
+    .from("notifications")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("type", "welcome")
+    .limit(1)
+
+  if (!existingWelcomeNotification || existingWelcomeNotification.length === 0) {
+    await supabase.from("notifications").insert({
+      user_id: user.id,
+      type: "welcome",
+      message: "Welcome to GyanSetu! Start exploring courses and solving questions.",
+      metadata: { is_welcome: true },
+    })
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,7 +75,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {isStudent && (
               <Link href="/dashboard/questions/new">
                 <Card className="p-6 hover:bg-card/80 transition-all duration-200 cursor-pointer hover:scale-[1.02] hover:shadow-lg border-primary/10">
@@ -61,6 +89,46 @@ export default async function DashboardPage() {
                 </Card>
               </Link>
             )}
+
+            <Link href="/solve-questions">
+              <Card className="p-6 hover:bg-card/80 transition-all duration-200 cursor-pointer hover:scale-[1.02] hover:shadow-lg border-primary/10">
+                <div className="space-y-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center">
+                    <MessageSquare className="w-6 h-6 text-primary" />
+                  </div>
+                  <h3 className="font-semibold text-foreground">Browse Questions</h3>
+                  <p className="text-sm text-muted-foreground">Browse and answer questions by subject or general topics</p>
+                </div>
+              </Card>
+            </Link>
+
+            <Link href="/enrolled-questions">
+              <Card className="p-6 hover:bg-card/80 transition-all duration-200 cursor-pointer hover:scale-[1.02] hover:shadow-lg border-primary/10">
+                <div className="space-y-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center">
+                    <BookOpen className="w-6 h-6 text-primary" />
+                  </div>
+                  <h3 className="font-semibold text-foreground">Solve Enrolled Courses Questions</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {isStudent 
+                      ? "Practice questions from your enrolled subjects"
+                      : "View and answer questions from enrolled courses"}
+                  </p>
+                </div>
+              </Card>
+            </Link>
+
+            <Link href="/resolved-questions">
+              <Card className="p-6 hover:bg-card/80 transition-all duration-200 cursor-pointer hover:scale-[1.02] hover:shadow-lg border-primary/10">
+                <div className="space-y-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-500/20 to-green-500/10 rounded-lg flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  </div>
+                  <h3 className="font-semibold text-foreground">Resolved Questions</h3>
+                  <p className="text-sm text-muted-foreground">View questions marked as solved by teachers/admins</p>
+                </div>
+              </Card>
+            </Link>
 
             <Link href="/dashboard/courses">
               <Card className="p-6 hover:bg-card/80 transition-all duration-200 cursor-pointer hover:scale-[1.02] hover:shadow-lg border-primary/10">

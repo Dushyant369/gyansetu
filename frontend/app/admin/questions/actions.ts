@@ -14,10 +14,13 @@ export async function deleteQuestion(questionId: string) {
     redirect("/auth/login")
   }
 
-  // Check if user is admin
+  // Check if user is admin or superadmin
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
-  if (profile?.role !== "admin") {
+  const userRole = profile?.role || "student"
+  const isAdmin = userRole === "admin" || userRole === "superadmin"
+
+  if (!isAdmin) {
     throw new Error("Only admins can delete questions")
   }
 
@@ -32,8 +35,8 @@ export async function deleteQuestion(questionId: string) {
     throw new Error("Question not found")
   }
 
-  // Check if course is assigned to this admin (if question has a course)
-  if (question.course_id) {
+  // SuperAdmin can delete any question, regular admins can only delete from assigned courses
+  if (userRole !== "superadmin" && question.course_id) {
     const { data: course } = await supabase
       .from("courses")
       .select("assigned_to")
@@ -66,14 +69,17 @@ export async function markQuestionResolved(questionId: string, resolved: boolean
     redirect("/auth/login")
   }
 
-  // Check if user is admin
+  // Check if user is admin or superadmin
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
-  if (profile?.role !== "admin") {
+  const userRole = profile?.role || "student"
+  const isAdmin = userRole === "admin" || userRole === "superadmin"
+
+  if (!isAdmin) {
     throw new Error("Only admins can mark questions as resolved")
   }
 
-  // Verify the question belongs to a course assigned to this admin
+  // Verify the question belongs to a course assigned to this admin (unless superadmin)
   const { data: question } = await supabase
     .from("questions")
     .select("course_id")
@@ -84,8 +90,8 @@ export async function markQuestionResolved(questionId: string, resolved: boolean
     throw new Error("Question not found")
   }
 
-  // Check if course is assigned to this admin (if question has a course)
-  if (question.course_id) {
+  // SuperAdmin can manage any question, regular admins can only manage assigned courses
+  if (userRole !== "superadmin" && question.course_id) {
     const { data: course } = await supabase
       .from("courses")
       .select("assigned_to")

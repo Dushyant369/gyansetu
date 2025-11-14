@@ -12,6 +12,9 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { BackButton } from "@/components/ui/back-button"
 import { MessageSquareReply } from "lucide-react"
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/date"
+import { QuestionVoting } from "@/components/question/question-voting"
+import { ReportButton } from "@/components/question/report-button"
+import { QuestionActions } from "@/components/question/question-actions"
 
 export default async function QuestionPage({
   params,
@@ -28,18 +31,38 @@ export default async function QuestionPage({
     redirect("/auth/login")
   }
 
-  // Get question with author and course info
+  // Get question with author and course info, including vote score
   const { data: question } = await supabase
     .from("questions")
     .select(
       `
       *,
-      profiles!author_id(display_name, email),
+      profiles!author_id(display_name, email, role),
       courses(id, name, code)
     `
     )
     .eq("id", questionId)
     .single()
+
+  const bestAnswerId = question?.best_answer_id || null
+
+  // Calculate question vote score
+  const { data: questionVotes } = await supabase
+    .from("question_votes")
+    .select("vote")
+    .eq("question_id", questionId)
+
+  const questionScore = questionVotes?.reduce((sum, v) => sum + v.vote, 0) || 0
+
+  // Get user's vote on this question
+  const { data: userQuestionVote } = await supabase
+    .from("question_votes")
+    .select("vote")
+    .eq("question_id", questionId)
+    .eq("user_id", user.id)
+    .single()
+
+  const userVote = userQuestionVote?.vote || null
 
   if (!question) {
     redirect("/courses")
@@ -72,6 +95,7 @@ export default async function QuestionPage({
         content,
         created_at,
         author_id,
+        image_url,
         profiles!author_id(display_name, email, role)
       )
     `
@@ -79,6 +103,29 @@ export default async function QuestionPage({
     .eq("question_id", questionId)
     .order("is_accepted", { ascending: false })
     .order("created_at", { ascending: true })
+
+  // Get vote scores for all answers
+  const answerIds = answers?.map((a) => a.id) || []
+  const { data: answerVotes } = answerIds.length > 0
+    ? await supabase.from("answer_votes").select("answer_id, vote").in("answer_id", answerIds)
+    : { data: [] }
+
+  // Get user's votes on all answers
+  const { data: userAnswerVotes } = answerIds.length > 0
+    ? await supabase
+        .from("answer_votes")
+        .select("answer_id, vote")
+        .in("answer_id", answerIds)
+        .eq("user_id", user.id)
+    : { data: [] }
+
+  // Calculate scores and attach user votes to answers
+  const answersWithVotes = answers?.map((answer) => {
+    const votes = answerVotes?.filter((v) => v.answer_id === answer.id) || []
+    const score = votes.reduce((sum, v) => sum + v.vote, 0)
+    const userVote = userAnswerVotes?.find((v) => v.answer_id === answer.id)?.vote || null
+    return { ...answer, voteScore: score, userVote }
+  }) || []
 
   const isQuestionAuthor = question.author_id === user.id
   const isCurrentUserAdmin = currentUserRole === "admin" || currentUserRole === "superadmin"
@@ -138,17 +185,43 @@ export default async function QuestionPage({
                   ))}
               </div>
 
-              <div className="flex justify-between items-center pt-4 border-t border-border text-sm text-muted-foreground">
-                <div className="flex gap-4">
-                  <span>{question.views || 0} views</span>
-                  <span>{question.upvotes - question.downvotes} votes</span>
-                  <span>{answers?.length || 0} answers</span>
+              <div className="flex justify-between items-center pt-4 border-t border-border">
+                <div className="flex items-center gap-6">
+                  <QuestionVoting
+                    questionId={questionId}
+                    initialScore={questionScore}
+                    userVote={userVote}
+                    currentUserId={user.id}
+                    disabled={isQuestionAuthor}
+                  />
+                  <div className="flex gap-4 text-sm text-muted-foreground">
+                    <span>{question.views || 0} views</span>
+                    <span>{answers?.length || 0} answers</span>
+                  </div>
                 </div>
-                <div title={formatAbsoluteTime(question.created_at)}>
-                  {question.is_anonymous
-                    ? "Anonymous"
-                    : question.profiles?.display_name || question.profiles?.email}{" "}
-                  • {formatRelativeTime(question.created_at)}
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-muted-foreground" title={formatAbsoluteTime(question.created_at)}>
+                    {question.is_anonymous
+                      ? "Anonymous"
+                      : question.profiles?.display_name || question.profiles?.email}{" "}
+                    • {formatRelativeTime(question.created_at)}
+                  </div>
+                  {!question.is_anonymous && (
+                    <>
+                      <QuestionActions
+                        question={{
+                          id: question.id,
+                          title: question.title,
+                          content: question.content,
+                          author_id: question.author_id,
+                          image_url: question.image_url,
+                        }}
+                        currentUserId={user.id}
+                        currentUserRole={currentUserRole}
+                      />
+                      <ReportButton questionId={questionId} currentUserId={user.id} size="sm" />
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -173,13 +246,14 @@ export default async function QuestionPage({
             )}
 
             {/* Answers List */}
-            {answers && answers.length > 0 ? (
+            {answersWithVotes && answersWithVotes.length > 0 ? (
               <AnswerList
-                answers={answers}
+                answers={answersWithVotes}
                 isQuestionAuthor={isQuestionAuthor || isCurrentUserAdmin}
                 currentUserId={user.id}
                 currentUserRole={currentUserRole}
                 questionId={questionId}
+                bestAnswerId={bestAnswerId}
               />
             ) : (
               <EmptyState

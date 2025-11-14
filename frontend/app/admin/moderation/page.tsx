@@ -18,8 +18,8 @@ export default async function ModerationPage() {
 
   const userRole = profile?.role || "student"
 
-  // Redirect non-admin users to dashboard
-  if (userRole !== "admin") {
+  // Redirect non-admin and non-superadmin users to dashboard
+  if (userRole !== "admin" && userRole !== "superadmin") {
     redirect("/dashboard?error=unauthorized&message=You don't have permission to access this page. Admin access required.")
   }
 

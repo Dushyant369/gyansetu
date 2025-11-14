@@ -15,10 +15,10 @@ export default async function ModerationPage() {
     redirect("/auth/login")
   }
 
-  // Check if user is moderator or admin
+  // Check if user is moderator, admin, or superadmin
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
-  if (!profile || (profile.role !== "moderator" && profile.role !== "admin")) {
+  if (!profile || (profile.role !== "moderator" && profile.role !== "admin" && profile.role !== "superadmin")) {
     redirect("/dashboard")
   }
 

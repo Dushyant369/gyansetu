@@ -45,7 +45,23 @@ export default async function AdminPage() {
   const totalUsers = usersResult.count || 0
   const totalCourses = coursesResult.count || 0
   const totalQuestions = questionsResult.count || 0
-  const topStudents = topStudentsResult.data || []
+  
+  // Ensure we get up to 5 students, including those with null karma_points
+  let topStudents = topStudentsResult.data || []
+  
+  // If we have fewer than 5 students, try to get more (including those with null karma)
+  if (topStudents.length < 5) {
+    const { data: additionalStudents } = await supabase
+      .from("profiles")
+      .select("id, display_name, email, karma_points")
+      .eq("role", "student")
+      .is("karma_points", null)
+      .limit(5 - topStudents.length)
+    
+    if (additionalStudents && additionalStudents.length > 0) {
+      topStudents = [...topStudents, ...additionalStudents].slice(0, 5)
+    }
+  }
 
   // Get recent users
   const { data: recentUsers } = await supabase
@@ -107,75 +123,81 @@ export default async function AdminPage() {
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="p-6">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <svg
-                      className="w-5 h-5 text-primary"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-                      />
-                    </svg>
+            <Link href="/admin#users">
+              <Card className="p-6 hover:bg-card/80 transition-colors cursor-pointer hover:scale-[1.02] hover:shadow-lg">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <svg
+                        className="w-5 h-5 text-primary"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Total Registered Users</p>
                   </div>
-                  <p className="text-sm text-muted-foreground">Total Registered Users</p>
+                  <p className="text-3xl font-bold text-foreground">{totalUsers}</p>
                 </div>
-                <p className="text-3xl font-bold text-foreground">{totalUsers}</p>
-              </div>
-            </Card>
-            <Card className="p-6">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <svg
-                      className="w-5 h-5 text-primary"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                      />
-                    </svg>
+              </Card>
+            </Link>
+            <Link href="/admin#courses">
+              <Card className="p-6 hover:bg-card/80 transition-colors cursor-pointer hover:scale-[1.02] hover:shadow-lg">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <svg
+                        className="w-5 h-5 text-primary"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Total Courses Created</p>
                   </div>
-                  <p className="text-sm text-muted-foreground">Total Courses Created</p>
+                  <p className="text-3xl font-bold text-foreground">{totalCourses}</p>
                 </div>
-                <p className="text-3xl font-bold text-foreground">{totalCourses}</p>
-              </div>
-            </Card>
-            <Card className="p-6">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <svg
-                      className="w-5 h-5 text-primary"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+              </Card>
+            </Link>
+            <Link href="/admin/questions">
+              <Card className="p-6 hover:bg-card/80 transition-colors cursor-pointer hover:scale-[1.02] hover:shadow-lg">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <svg
+                        className="w-5 h-5 text-primary"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Total Questions Posted</p>
                   </div>
-                  <p className="text-sm text-muted-foreground">Total Questions Posted</p>
+                  <p className="text-3xl font-bold text-foreground">{totalQuestions}</p>
                 </div>
-                <p className="text-3xl font-bold text-foreground">{totalQuestions}</p>
-              </div>
-            </Card>
+              </Card>
+            </Link>
           </div>
 
           {/* Top Students by Karma */}
@@ -245,10 +267,14 @@ export default async function AdminPage() {
           </Card>
 
           {/* Manage Users */}
-          <ManageUsers currentUserId={user.id} currentUserRole={userRole} />
+          <div id="users">
+            <ManageUsers currentUserId={user.id} currentUserRole={userRole} />
+          </div>
 
           {/* Course Management */}
-          <CourseManagement courses={courses || []} adminUsers={adminUsers || []} />
+          <div id="courses">
+            <CourseManagement adminUsers={adminUsers || []} />
+          </div>
 
           {/* Quick Actions */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

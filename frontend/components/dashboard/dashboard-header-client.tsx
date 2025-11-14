@@ -41,14 +41,23 @@ export function DashboardHeaderClient({ showAdminLink = false }: DashboardHeader
           .eq("id", user.id)
           .single()
 
-        setUserProfile(
-          profile || {
-            id: user.id,
-            email: user.email,
-            display_name: user.email?.split("@")[0] || "User",
-            role: "student",
-          }
-        )
+        const metadataDisplayName =
+          (typeof user.user_metadata?.display_name === "string" && user.user_metadata.display_name.trim()) ||
+          (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
+          (typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim()) ||
+          null
+
+        const resolvedDisplayName =
+          (profile?.display_name && profile.display_name.trim().length > 0 && profile.display_name.trim()) ||
+          metadataDisplayName ||
+          (user.email?.split("@")[0] ?? "User")
+
+        setUserProfile({
+          id: profile?.id ?? user.id,
+          email: profile?.email ?? user.email ?? "",
+          display_name: resolvedDisplayName,
+          role: profile?.role ?? "student",
+        })
       } catch (error) {
         console.error("Error fetching user:", error)
       } finally {

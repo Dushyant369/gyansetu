@@ -69,7 +69,9 @@ export default function SignUpPage() {
     try {
       const normalizedEmail = email.trim().toLowerCase()
       const supabase = createClient()
-      const redirectUrl = `${window.location.origin}/auth/callback`
+      // Use environment variable if available, otherwise fall back to window.location.origin
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+      const redirectUrl = `${appUrl}/auth/callback`
 
       const { data, error: authError } = await supabase.auth.signUp({
         email: normalizedEmail,

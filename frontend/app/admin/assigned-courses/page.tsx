@@ -19,12 +19,13 @@ export default async function AssignedCoursesPage() {
 
   const userRole = profile?.role || "student"
 
-  // Redirect non-admin users to dashboard
-  if (userRole !== "admin") {
+  // Redirect non-admin and non-superadmin users to dashboard
+  if (userRole !== "admin" && userRole !== "superadmin") {
     redirect("/dashboard")
   }
 
-  // Get all courses assigned to this admin
+  // Both admins and superadmins only see courses assigned to them
+  // SuperAdmin can manage all courses from the main admin panel
   const { data: assignedCourses } = await supabase
     .from("courses")
     .select("*")
@@ -54,7 +55,7 @@ export default async function AssignedCoursesPage() {
           <div>
             <h2 className="text-3xl font-bold text-foreground mb-2">My Assigned Courses</h2>
             <p className="text-muted-foreground">
-              Manage questions and answers for courses assigned to you. Welcome, {profile?.display_name || "Admin"}!
+              Manage questions and answers for courses assigned to you. The "General Questions" section contains questions not assigned to any specific course. Welcome, {profile?.display_name || "Admin"}!
             </p>
           </div>
 

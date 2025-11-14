@@ -129,7 +129,8 @@ export function ModerationContent({ stats, courses }: ModerationContentProps) {
     }
 
     fetchContent()
-  }, [contentType, selectedCourse, searchTerm, toast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentType, selectedCourse, searchTerm])
 
   const handleDeleteQuestion = async (questionId: string) => {
     startTransition(async () => {

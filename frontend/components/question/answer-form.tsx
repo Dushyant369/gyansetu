@@ -28,6 +28,16 @@ export function AnswerForm({ questionId }: AnswerFormProps) {
   const { toast } = useToast()
   const router = useRouter()
 
+  // Validate questionId
+  if (!questionId) {
+    console.error("AnswerForm: questionId is missing")
+    return (
+      <Card className="p-6">
+        <p className="text-destructive">Error: Question ID is missing. Please refresh the page.</p>
+      </Card>
+    )
+  }
+
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) {
@@ -72,6 +82,17 @@ export function AnswerForm({ questionId }: AnswerFormProps) {
 
   const submitAnswer = async () => {
     setFieldErrors((prev) => ({ ...prev, content: undefined }))
+
+    // Validate questionId
+    if (!questionId || typeof questionId !== "string") {
+      const message = "Invalid question ID. Please refresh the page."
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      })
+      return
+    }
 
     if (!content.trim()) {
       const message = "Answer content is required."
@@ -119,14 +140,21 @@ export function AnswerForm({ questionId }: AnswerFormProps) {
           uploadedImageUrl = publicUrl
         }
 
-        await createAnswer(questionId, content.trim(), uploadedImageUrl)
+        const result = await createAnswer(questionId, content.trim(), uploadedImageUrl)
+        
+        if (!result) {
+          throw new Error("Answer was not created. Please try again.")
+        }
+
         toast({
           title: "Success",
           description: "Answer posted successfully!",
         })
         resetForm()
+        // Force refresh to show new answer
         router.refresh()
       } catch (error) {
+        console.error("Answer submission error:", error)
         const message = error instanceof Error ? error.message : "Failed to post answer"
         toast({
           title: "Error",

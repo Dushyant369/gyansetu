@@ -23,11 +23,16 @@ export default function LoginPage() {
 
   const studentPattern = /^[0-9]{9}@gkv\.ac\.in$/i
   const teacherPattern = /^[a-zA-Z.]+@gkv\.ac\.in$/i
+  const superAdminEmail = "icygenius08@gmail.com"
   const invalidEmailMessage =
     "Only GKV-registered email addresses are allowed. Please use your official college email."
 
   const isCollegeEmail = (value: string) => {
     const normalized = value.trim().toLowerCase()
+    // SuperAdmin can login with any email (bypass validation)
+    if (normalized === superAdminEmail) {
+      return true
+    }
     return studentPattern.test(normalized) || teacherPattern.test(normalized)
   }
 
