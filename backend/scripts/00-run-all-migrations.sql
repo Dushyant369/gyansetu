@@ -267,13 +267,46 @@ BEGIN
   END IF;
 END $$;
 
--- Step 2: Update existing NULL roles to 'student' (if any exist)
-UPDATE profiles SET role = 'student' WHERE role IS NULL;
-
--- Step 3: Add constraint to ensure role values are valid
--- Drop constraint if it exists first
+-- Step 2: Update existing NULL or invalid roles to 'student' (if any exist)
+-- First, drop any existing constraint temporarily to allow updates
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 
+-- Temporarily disable session replication to bypass triggers during bulk update
+SET session_replication_role = 'replica';
+
+-- Comprehensive fix for all invalid role values
+-- Update NULL roles
+UPDATE profiles SET role = 'student' WHERE role IS NULL;
+
+-- Update empty strings and whitespace-only strings
+UPDATE profiles SET role = 'student' WHERE TRIM(role) = '' OR role = '';
+
+-- Update any role that doesn't match exactly (case-insensitive check)
+UPDATE profiles 
+SET role = CASE 
+  WHEN LOWER(TRIM(role)) = 'student' THEN 'student'
+  WHEN LOWER(TRIM(role)) = 'admin' THEN 'admin'
+  ELSE 'student'
+END
+WHERE role IS NOT NULL 
+AND LOWER(TRIM(role)) NOT IN ('student', 'admin');
+
+-- Normalize all roles to lowercase and trim whitespace
+UPDATE profiles 
+SET role = LOWER(TRIM(role))
+WHERE role IS NOT NULL;
+
+-- Final safety check - set any remaining invalid values to 'student'
+UPDATE profiles 
+SET role = 'student'
+WHERE role IS NULL 
+OR TRIM(role) = ''
+OR role NOT IN ('student', 'admin');
+
+-- Re-enable session replication
+SET session_replication_role = 'origin';
+
+-- Step 3: Add constraint to ensure role values are valid
 -- Add constraint for valid role values: student, admin
 ALTER TABLE profiles 
 ADD CONSTRAINT profiles_role_check 
@@ -656,8 +689,46 @@ END $$;
 -- This script adds support for 'superadmin' role and sets up permissions
 
 -- Step 1: Update role constraint to include 'superadmin'
+-- First, drop the constraint temporarily to allow updates
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 
+-- Temporarily disable session replication to bypass triggers during bulk update
+SET session_replication_role = 'replica';
+
+-- Comprehensive fix for all invalid role values
+-- Update NULL roles
+UPDATE profiles SET role = 'student' WHERE role IS NULL;
+
+-- Update empty strings and whitespace-only strings
+UPDATE profiles SET role = 'student' WHERE TRIM(role) = '' OR role = '';
+
+-- Update any role that doesn't match exactly (case-insensitive check)
+UPDATE profiles 
+SET role = CASE 
+  WHEN LOWER(TRIM(role)) = 'student' THEN 'student'
+  WHEN LOWER(TRIM(role)) = 'admin' THEN 'admin'
+  WHEN LOWER(TRIM(role)) = 'superadmin' THEN 'superadmin'
+  ELSE 'student'
+END
+WHERE role IS NOT NULL 
+AND LOWER(TRIM(role)) NOT IN ('student', 'admin', 'superadmin');
+
+-- Normalize all roles to lowercase and trim whitespace
+UPDATE profiles 
+SET role = LOWER(TRIM(role))
+WHERE role IS NOT NULL;
+
+-- Final safety check - set any remaining invalid values to 'student'
+UPDATE profiles 
+SET role = 'student'
+WHERE role IS NULL 
+OR TRIM(role) = ''
+OR role NOT IN ('student', 'admin', 'superadmin');
+
+-- Re-enable session replication
+SET session_replication_role = 'origin';
+
+-- Now recreate the constraint
 ALTER TABLE profiles 
 ADD CONSTRAINT profiles_role_check 
 CHECK (role IN ('student', 'admin', 'superadmin'));
@@ -691,6 +762,7 @@ WHERE email = 'icygenius08@gmail.com';
 -- Drop existing admin policies
 DROP POLICY IF EXISTS "Admins can update any user profile" ON profiles;
 DROP POLICY IF EXISTS "SuperAdmins can update any user profile" ON profiles;
+DROP POLICY IF EXISTS "Admins can update student profiles" ON profiles;
 
 -- Create policy: SuperAdmins can update any user's profile and role
 CREATE POLICY "SuperAdmins can update any user profile" ON profiles 
@@ -804,6 +876,80 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 ALTER TABLE questions ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE answers ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE replies ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+-- ============================================
+-- Script 19: Fix RLS and Add Missing Features
+-- ============================================
+-- Fix RLS for Courses
+DROP POLICY IF EXISTS "Courses are viewable by everyone" ON courses;
+DROP POLICY IF EXISTS "Only admins can create courses" ON courses;
+DROP POLICY IF EXISTS "Only admins can update courses" ON courses;
+DROP POLICY IF EXISTS "course_select" ON courses;
+DROP POLICY IF EXISTS "course_admin_insert" ON courses;
+DROP POLICY IF EXISTS "course_admin_update" ON courses;
+DROP POLICY IF EXISTS "course_admin_delete" ON courses;
+DROP POLICY IF EXISTS "course_admin_write" ON courses;
+
+CREATE POLICY "course_select" 
+ON courses FOR SELECT 
+TO authenticated 
+USING (true);
+
+-- Separate policies for INSERT, UPDATE, DELETE
+CREATE POLICY "course_admin_insert"
+ON courses
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('admin', 'superadmin')
+  )
+);
+
+CREATE POLICY "course_admin_update"
+ON courses
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('admin', 'superadmin')
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('admin', 'superadmin')
+  )
+);
+
+CREATE POLICY "course_admin_delete"
+ON courses
+FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('admin', 'superadmin')
+  )
+);
+
+-- Add resolved column to questions if it doesn't exist
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS resolved BOOLEAN DEFAULT false;
+
+-- Block self-voting on questions
+DROP POLICY IF EXISTS "no_self_vote" ON question_votes;
+CREATE POLICY "no_self_vote"
+ON question_votes
+FOR INSERT TO authenticated
+WITH CHECK (
+  auth.uid() != (SELECT author_id FROM questions WHERE id = question_id)
+);
 
 -- ============================================
 -- All database migrations have been applied successfully.
