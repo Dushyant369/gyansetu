@@ -101,8 +101,8 @@ export async function GET() {
         course_id: question.course_id,
         course: courseData
           ? {
-              name: courseData.name || null,
-              code: courseData.code || null,
+              name: (courseData as any)?.name || null,
+              code: (courseData as any)?.code || null,
             }
           : null,
         author: {
