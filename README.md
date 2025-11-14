@@ -57,24 +57,35 @@ A modern, real-time web application that combines the best aspects of Q&A platfo
   - **+10 karma** for each upvote on your answer
   - **+20 karma** for accepted answers
 - ✅ **Real-time Notifications** – Get notified when:
+  - You log in for the first time (welcome message)
   - Your questions receive answers
-  - Your answers are upvoted
-  - Your answers are accepted
+  - Your answers receive replies
+  - Your answers are upvoted/downvoted
+  - Your answers are accepted or marked as best answer
 - ✅ **Profile Dashboard** – View your activity, karma, and achievements
 - ✅ **Course Q&A Boards** – Access course-specific question boards for enrolled courses
+- ✅ **Resolved Questions** – Browse all questions that have been marked as resolved with best answers, grouped by subject
+- ✅ **Solve Questions** – Browse and answer questions by subject or general topics
+- ✅ **Enrolled Courses Questions** – View and answer questions from your enrolled courses
+- ✅ **Upvote/Downvote System** – Vote on questions and answers (with role-based rules)
+- ✅ **Reply System** – Reply to answers to create threaded discussions
+- ✅ **Best Answer Feature** – Admins/teachers can mark student answers as best answer (+10 karma)
+- ✅ **Edit/Delete Content** – Edit or delete your own questions and answers
 
 ### 👨‍💼 For Admins
 
 - ✅ **Course Management** – Create, edit, and delete courses with semester organization
-- ✅ **User Management** – View all users, search by name/email, and change roles
-- ✅ **Content Moderation** – Edit or delete inappropriate questions and answers
+- ✅ **User Management** – View all users with search and pagination (10 users per page), change roles
+- ✅ **Content Moderation** – Edit or delete any questions and answers, mark best answers
 - ✅ **Analytics Dashboard** – View platform statistics:
-  - Total registered users
-  - Total courses created
-  - Total questions posted
+  - Total registered users (clickable → Manage Users)
+  - Total courses created (clickable → Manage Courses)
+  - Total questions posted (clickable → View/Manage Questions)
   - Top 5 students by karma
-- ✅ **Role Management** – Promote/demote users between "student" and "admin" roles
+- ✅ **Role Management** – Promote/demote users between "student", "admin", and "superadmin" roles
 - ✅ **Admin Assignment** – Assign admins to specific courses for better management
+- ✅ **Course Management** – Create, edit, delete courses with search and pagination (10 courses per page)
+- ✅ **Best Answer Moderation** – Mark student answers as best answer and reward karma (+10 points)
 
 ### 🌐 Common Features
 
@@ -86,6 +97,11 @@ A modern, real-time web application that combines the best aspects of Q&A platfo
 - ✅ **Smooth Animations** – Fade-in, slide-up, and scale transitions
 - ✅ **Loading States** – Skeleton loaders and spinners for better UX
 - ✅ **Empty States** – Helpful messages when no content is available
+- ✅ **Auto-Mark Notifications** – Notifications automatically marked as seen after 10 seconds when dropdown is opened
+- ✅ **Pagination & Search** – Server-side pagination and search for courses, users, and questions
+- ✅ **Image Uploads** – Support for images in questions, answers, and replies (max 5MB, JPEG/PNG)
+- ✅ **Keyboard Shortcuts** – Submit answers/replies with Enter (Shift+Enter for new line)
+- ✅ **Date Formatting** – Human-readable "time ago" format for all timestamps
 
 ---
 
@@ -163,6 +179,7 @@ questions (
   is_anonymous BOOLEAN DEFAULT FALSE,
   user_id UUID REFERENCES profiles(id),
   course_id UUID REFERENCES courses(id),
+  best_answer_id UUID REFERENCES answers(id), -- Best answer reference
   created_at TIMESTAMP
 )
 
@@ -172,9 +189,39 @@ answers (
   content TEXT NOT NULL,
   question_id UUID REFERENCES questions(id),
   user_id UUID REFERENCES profiles(id),
-  upvoted_by UUID[],
+  image_url TEXT, -- Image support
   is_accepted BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP
+)
+
+-- Replies (threaded discussions)
+replies (
+  id UUID PRIMARY KEY,
+  answer_id UUID REFERENCES answers(id),
+  author_id UUID REFERENCES profiles(id),
+  content TEXT NOT NULL,
+  image_url TEXT, -- Image support
+  created_at TIMESTAMP
+)
+
+-- Question Votes
+question_votes (
+  id UUID PRIMARY KEY,
+  question_id UUID REFERENCES questions(id),
+  user_id UUID REFERENCES profiles(id),
+  vote_type TEXT, -- 'upvote' or 'downvote'
+  created_at TIMESTAMP,
+  UNIQUE(question_id, user_id)
+)
+
+-- Answer Votes
+answer_votes (
+  id UUID PRIMARY KEY,
+  answer_id UUID REFERENCES answers(id),
+  user_id UUID REFERENCES profiles(id),
+  vote_type TEXT, -- 'upvote' or 'downvote'
+  created_at TIMESTAMP,
+  UNIQUE(answer_id, user_id)
 )
 
 -- Notifications
@@ -182,8 +229,11 @@ notifications (
   id UUID PRIMARY KEY,
   user_id UUID REFERENCES profiles(id),
   message TEXT NOT NULL,
-  type TEXT, -- 'answer', 'upvote', 'accepted'
+  type TEXT, -- 'answer', 'upvote', 'accepted', 'reply', 'welcome'
   seen BOOLEAN DEFAULT FALSE,
+  metadata JSONB, -- Additional metadata (e.g., reply_id, is_welcome)
+  related_question_id UUID REFERENCES questions(id),
+  related_answer_id UUID REFERENCES answers(id),
   created_at TIMESTAMP
 )
 
@@ -304,10 +354,14 @@ Visit **[http://localhost:3000](http://localhost:3000)** in your browser.
 | `/dashboard/questions` | Browse all questions | Authenticated |
 | `/dashboard/questions/new` | Ask a new question | Authenticated |
 | `/dashboard/questions/[id]` | View question details | Authenticated |
-| `/courses` | Browse all available courses | Authenticated |
-| `/my-courses` | View enrolled courses | Authenticated |
-| `/courses/[id]/questions` | Course-specific Q&A board | Authenticated (enrolled) |
-| `/question/[id]` | Detailed Q&A page with answers | Authenticated |
+| `/dashboard/courses` | Browse all available courses | Authenticated |
+| `/resolved-questions` | View all resolved questions grouped by subject | Authenticated |
+| `/solve-questions` | Browse and answer questions by subject | Authenticated |
+| `/solve-questions/[subjectId]` | Questions for a specific subject | Authenticated |
+| `/enrolled-questions` | View enrolled courses and their questions | Authenticated (students) |
+| `/enrolled-questions/[courseId]` | Questions for a specific enrolled course | Authenticated (enrolled) |
+| `/question/[id]` | Detailed Q&A page with answers, replies, voting | Authenticated |
+| `/notifications` | View all notifications | Authenticated |
 | `/admin` | Admin dashboard with stats | Admin only |
 | `/admin/moderation` | Content moderation tools | Admin only |
 
@@ -373,17 +427,31 @@ GyanSetu/
 
 ---
 
+## 🆕 Recent Features Added
+
+### Version 2.0 Updates
+
+- ✅ **Resolved Questions Section** – Browse all questions with best answers, grouped by subject
+- ✅ **Enhanced Notifications** – First login welcome, reply notifications, best answer alerts
+- ✅ **Auto-Mark Notifications** – Notifications automatically marked as seen after 10 seconds
+- ✅ **Pagination & Search** – Server-side pagination and search for admin tables (users, courses)
+- ✅ **Enrolled Courses Questions** – Dedicated workflow for students to solve questions from enrolled courses
+- ✅ **Full Voting System** – Upvote/downvote questions and answers with role-based rules
+- ✅ **Reply System** – Threaded discussions with image support
+- ✅ **Best Answer Feature** – Admins/teachers can mark student answers as best answer (+10 karma)
+- ✅ **Edit/Delete Functionality** – Users can edit/delete their own content; admins can moderate any content
+- ✅ **Image Uploads** – Support for images in questions, answers, and replies (max 5MB, JPEG/PNG)
+- ✅ **Keyboard Shortcuts** – Submit answers/replies with Enter key
+- ✅ **Human-Readable Dates** – "Time ago" format for all timestamps
+
 ## 🚀 Future Enhancements
 
 - [ ] **AI-Powered Suggestions** – Use free LLM APIs to suggest answers
 - [ ] **Gamified Badges** – Award badges for milestones (First Answer, 100 Karma, etc.)
 - [ ] **Leaderboard** – Top contributors by course and overall
-- [ ] **User Reporting System** – Allow users to report inappropriate content
-- [ ] **Light/Dark Theme Toggle** – User preference for theme switching
 - [ ] **Advanced Analytics** – More detailed charts and insights for admins
-- [ ] **Search Functionality** – Full-text search across questions and answers
+- [ ] **Full-Text Search** – Search across questions and answers
 - [ ] **Email Notifications** – Optional email digests for activity
-- [ ] **File Attachments** – Support for images and documents in questions/answers
 - [ ] **Markdown Support** – Rich text formatting in questions and answers
 - [ ] **Course Categories** – Organize courses by department or program
 - [ ] **Private Messaging** – Direct messaging between users

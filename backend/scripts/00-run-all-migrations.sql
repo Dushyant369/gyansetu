@@ -798,6 +798,14 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ============================================
 -- Setup Complete!
 -- ============================================
+-- Script 18: Fix Image Upload Schema
+-- ============================================
+-- Add image_url columns if they don't exist
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE answers ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE replies ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+-- ============================================
 -- All database migrations have been applied successfully.
 -- 
 -- Next steps:
@@ -806,5 +814,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 3. The email 'icygenius08@gmail.com' will automatically get 'superadmin' role
 -- 4. Manually change other users' role to 'admin' in the profiles table if needed
 -- 5. Enable Realtime for notifications in Supabase Dashboard if needed
+-- 6. Create 'qa-images' storage bucket in Supabase Dashboard → Storage
+-- 7. Set bucket to public and configure storage policies
 -- ============================================
 
