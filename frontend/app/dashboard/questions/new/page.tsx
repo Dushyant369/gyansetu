@@ -2,15 +2,19 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { BackButton } from "@/components/ui/back-button"
 import { DashboardHeaderClient } from "@/components/dashboard/dashboard-header-client"
+import { Label } from "@/components/ui/label"
+import { Upload, X } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import {
   Select,
   SelectContent,
@@ -35,6 +39,11 @@ export default function AskQuestionPage() {
   const [loadingCourses, setLoadingCourses] = useState(true)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const { toast } = useToast()
   const router = useRouter()
 
   // Fetch enrolled courses on component mount
@@ -118,47 +127,117 @@ export default function AskQuestionPage() {
     fetchCourses()
   }, [router])
 
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      setImageFile(null)
+      setImagePreview(null)
+      return
+    }
+
+    const allowedTypes = ["image/jpeg", "image/png"]
+    if (!allowedTypes.includes(file.type) || file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "Invalid image",
+        description: "Only JPG or PNG images under 5MB are allowed.",
+        variant: "destructive",
+      })
+      setImageFile(null)
+      setImagePreview(null)
+      return
+    }
+
+    const previewUrl = URL.createObjectURL(file)
+    setImageFile(file)
+    setImagePreview(previewUrl)
+  }
+
+  const removeImage = () => {
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview)
+    }
+    setImageFile(null)
+    setImagePreview(null)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-    setLoading(true)
 
-    try {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+    startTransition(async () => {
+      try {
+        const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
 
-      if (!user) {
-        router.push("/auth/login")
-        return
-      }
+        if (!user) {
+          router.push("/auth/login")
+          return
+        }
 
-      const tagsArray = tags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter((tag) => tag)
+        const tagsArray = tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter((tag) => tag)
 
-      const { data, error: insertError } = await supabase
-        .from("questions")
-        .insert({
-          title,
-          content: content || null, // Make content optional
-          author_id: user.id,
-          tags: tagsArray,
-          course_id: courseId && courseId !== "others" ? courseId : null,
+        let uploadedImageUrl: string | null = null
+
+        if (imageFile) {
+          setIsUploading(true)
+          const fileExt = imageFile.name.split(".").pop() || "jpg"
+          const fileName = `${user.id}-question-${Date.now()}.${fileExt}`
+          const filePath = `questions/${fileName}`
+
+          const { error: uploadError } = await supabase.storage
+            .from("qa-images")
+            .upload(filePath, imageFile, {
+              cacheControl: "3600",
+              upsert: true,
+            })
+
+          if (uploadError) {
+            throw new Error(uploadError.message || "Failed to upload image")
+          }
+
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from("qa-images").getPublicUrl(filePath)
+          uploadedImageUrl = publicUrl
+          setIsUploading(false)
+        }
+
+        const { data, error: insertError } = await supabase
+          .from("questions")
+          .insert({
+            title,
+            content: content || null,
+            author_id: user.id,
+            tags: tagsArray,
+            course_id: courseId && courseId !== "others" ? courseId : null,
+            image_url: uploadedImageUrl || null,
+          })
+          .select()
+          .single()
+
+        if (insertError) throw insertError
+
+        if (imagePreview) {
+          URL.revokeObjectURL(imagePreview)
+        }
+
+        router.push(`/dashboard/questions/${data.id}`)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to create question")
+        toast({
+          title: "Error",
+          description: err instanceof Error ? err.message : "Failed to create question",
+          variant: "destructive",
         })
-        .select()
-        .single()
-
-      if (insertError) throw insertError
-
-      router.push(`/dashboard/questions/${data.id}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create question")
-    } finally {
-      setLoading(false)
-    }
+      } finally {
+        setIsUploading(false)
+      }
+    })
   }
 
   return (
@@ -273,9 +352,58 @@ export default function AskQuestionPage() {
                 value={tags}
                 onChange={(e) => setTags(e.target.value)}
                 placeholder="e.g., calculus, derivatives, integration"
-                disabled={loading}
+                disabled={isPending || isUploading}
               />
               <p className="text-xs text-muted-foreground mt-2">Add tags to help others find your question</p>
+            </div>
+
+            <div>
+              <Label htmlFor="image" className="block text-sm font-medium text-foreground mb-2">
+                Image (Optional)
+              </Label>
+              <div className="space-y-2">
+                {!imagePreview ? (
+                  <label
+                    htmlFor="image"
+                    className="flex items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary transition-colors"
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="w-6 h-6 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Click to upload image (JPG/PNG, max 5MB)</span>
+                    </div>
+                    <input
+                      id="image"
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      onChange={handleImageChange}
+                      className="hidden"
+                      disabled={isPending || isUploading}
+                    />
+                  </label>
+                ) : (
+                  <div className="relative">
+                    <div className="relative w-full h-48 rounded-lg overflow-hidden border border-border">
+                      <Image
+                        src={imagePreview}
+                        alt="Preview"
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={removeImage}
+                      className="absolute top-2 right-2"
+                      disabled={isPending || isUploading}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Upload an image to help illustrate your question</p>
             </div>
 
             {error && (
@@ -285,11 +413,11 @@ export default function AskQuestionPage() {
             )}
 
             <div className="flex gap-4 pt-6">
-              <Button type="submit" disabled={loading}>
-                {loading ? "Posting..." : "Post Question"}
+              <Button type="submit" disabled={isPending || isUploading}>
+                {isPending || isUploading ? (isUploading ? "Uploading..." : "Posting...") : "Post Question"}
               </Button>
               <Link href="/dashboard/questions">
-                <Button variant="outline">Cancel</Button>
+                <Button variant="outline" disabled={isPending || isUploading}>Cancel</Button>
               </Link>
             </div>
           </form>

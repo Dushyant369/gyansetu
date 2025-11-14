@@ -61,6 +61,7 @@ export default async function EnrolledCourseQuestionsPage({
       is_resolved,
       best_answer_id,
       author_id,
+      image_url,
       profiles!author_id(display_name, email, role)
     `
     )

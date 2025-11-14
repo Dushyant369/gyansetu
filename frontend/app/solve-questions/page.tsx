@@ -35,6 +35,7 @@ export default async function SolveQuestionsPage() {
       created_at,
       views,
       author_id,
+      image_url,
       profiles!author_id(display_name, email)
     `
     )

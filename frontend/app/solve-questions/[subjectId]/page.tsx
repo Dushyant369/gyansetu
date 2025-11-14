@@ -47,6 +47,7 @@ export default async function SubjectQuestionsPage({
       created_at,
       views,
       is_resolved,
+      image_url,
       profiles!author_id(display_name, email, role)
     `
     )
