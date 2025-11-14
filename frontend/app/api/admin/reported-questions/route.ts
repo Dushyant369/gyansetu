@@ -73,10 +73,10 @@ export async function GET() {
     }
 
     // Group reports by question_id and attach to questions
-    const questionsWithReports = (questions || []).map((question) => {
+    const questionsWithReports = (questions || []).map((question: any) => {
       const questionReports = (reports || [])
         .filter((r) => r.question_id === question.id)
-        .map((report) => ({
+        .map((report: any) => ({
           report_id: report.id,
           reason: report.reason,
           reported_by: {
@@ -90,20 +90,24 @@ export async function GET() {
       // Get latest report date for sorting
       const latestReportDate = questionReports.length > 0 ? questionReports[0].reported_at : question.created_at
 
+      // Handle courses (can be array or object due to Supabase type inference)
+      const courseData = Array.isArray(question.courses) ? question.courses[0] : question.courses
+      const profileData = Array.isArray(question.profiles) ? question.profiles[0] : question.profiles
+
       return {
         id: question.id,
         title: question.title,
         description: question.content,
         course_id: question.course_id,
-        course: question.courses
+        course: courseData
           ? {
-              name: Array.isArray(question.courses) ? question.courses[0]?.name : question.courses?.name,
-              code: Array.isArray(question.courses) ? question.courses[0]?.code : question.courses?.code,
+              name: courseData.name || null,
+              code: courseData.code || null,
             }
           : null,
         author: {
-          name: Array.isArray(question.profiles) ? question.profiles[0]?.display_name : question.profiles?.display_name,
-          email: Array.isArray(question.profiles) ? question.profiles[0]?.email : question.profiles?.email,
+          name: profileData?.display_name || null,
+          email: profileData?.email || null,
         },
         created_at: question.created_at,
         is_resolved: question.is_resolved || false,
