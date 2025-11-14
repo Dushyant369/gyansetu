@@ -43,10 +43,20 @@ export default async function SolveQuestionsPage() {
     .order("created_at", { ascending: false })
 
   // Transform data to handle Supabase type inference (profiles can be array or object)
-  const generalQuestions = generalQuestionsRaw?.map((q: any) => ({
-    ...q,
-    profiles: Array.isArray(q.profiles) ? q.profiles[0] : q.profiles,
-  })) || []
+  // Also get answer counts for each question
+  const generalQuestions = await Promise.all(
+    (generalQuestionsRaw || []).map(async (q: any) => {
+      const { count } = await supabase
+        .from("answers")
+        .select("*", { count: "exact", head: true })
+        .eq("question_id", q.id)
+      return {
+        ...q,
+        profiles: Array.isArray(q.profiles) ? q.profiles[0] : q.profiles,
+        answerCount: count || 0,
+      }
+    })
+  )
 
   if (subjectsError) {
     console.error("Error fetching subjects:", subjectsError)

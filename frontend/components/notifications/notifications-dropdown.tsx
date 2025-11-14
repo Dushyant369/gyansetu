@@ -36,6 +36,8 @@ function getNotificationIcon(type: string): string {
       return "✅"
     case "reply":
       return "💭"
+    case "resolved":
+      return "✅"
     case "welcome":
       return "👋"
     default:

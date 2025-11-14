@@ -19,7 +19,7 @@ export default async function ResolvedQuestionsPage() {
     redirect("/auth/login")
   }
 
-  // Fetch resolved questions (where best_answer_id IS NOT NULL)
+  // Fetch resolved questions (where resolved = true OR best_answer_id IS NOT NULL)
   const { data: questions, error: questionsError } = await supabase
     .from("questions")
     .select(
@@ -28,6 +28,7 @@ export default async function ResolvedQuestionsPage() {
       title,
       content,
       best_answer_id,
+      resolved,
       course_id,
       created_at,
       views,
@@ -35,7 +36,7 @@ export default async function ResolvedQuestionsPage() {
       profiles!author_id(display_name, email)
     `
     )
-    .not("best_answer_id", "is", null)
+    .or("resolved.eq.true,best_answer_id.not.is.null")
     .order("created_at", { ascending: false })
 
   if (questionsError) {

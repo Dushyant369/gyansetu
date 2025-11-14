@@ -58,6 +58,17 @@ export default async function SubjectQuestionsPage({
     console.error("Error fetching questions:", questionsError)
   }
 
+  // Get answer counts for each question
+  const questionsWithCounts = await Promise.all(
+    (questions || []).map(async (question: any) => {
+      const { count } = await supabase
+        .from("answers")
+        .select("*", { count: "exact", head: true })
+        .eq("question_id", question.id)
+      return { ...question, answerCount: count || 0 }
+    })
+  )
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader />
@@ -88,9 +99,9 @@ export default async function SubjectQuestionsPage({
           </div>
 
           {/* Questions List */}
-          {questions && questions.length > 0 ? (
+          {questionsWithCounts && questionsWithCounts.length > 0 ? (
             <div className="space-y-4">
-              {questions.map((question) => (
+              {questionsWithCounts.map((question) => (
                 <Link
                   key={question.id}
                   href={`/question/${question.id}`}
@@ -138,6 +149,8 @@ export default async function SubjectQuestionsPage({
                         })()}
                         <span>•</span>
                         <span>{question.views || 0} views</span>
+                        <span>•</span>
+                        <span>{question.answerCount || 0} answers</span>
                         <span>•</span>
                         <span>{formatRelativeTime(question.created_at)}</span>
                       </div>

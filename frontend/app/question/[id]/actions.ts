@@ -754,10 +754,27 @@ export async function markAsResolved(questionId: string) {
 
   const newResolvedStatus = !question.resolved
 
+  // Get question details for notification
+  const { data: questionDetails } = await supabase
+    .from("questions")
+    .select("author_id, title")
+    .eq("id", questionId)
+    .single()
+
   const { error } = await supabase.from("questions").update({ resolved: newResolvedStatus }).eq("id", questionId)
 
   if (error) {
     throw new Error(error.message || "Failed to update resolved status")
+  }
+
+  // Create notification for question author when marked as resolved
+  if (newResolvedStatus && questionDetails && questionDetails.author_id !== user.id) {
+    await supabase.from("notifications").insert({
+      user_id: questionDetails.author_id,
+      message: `Your question "${questionDetails.title.substring(0, 50)}" was marked as resolved!`,
+      type: "resolved",
+      related_question_id: questionId,
+    })
   }
 
   revalidatePath(`/question/${questionId}`)

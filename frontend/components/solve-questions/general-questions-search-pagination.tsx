@@ -17,6 +17,7 @@ interface GeneralQuestion {
   created_at: string
   views: number | null
   author_id: string
+  answerCount?: number
   profiles: {
     display_name: string | null
     email: string
@@ -116,6 +117,8 @@ export function GeneralQuestionsSearchPagination({
                         </span>
                         <span>•</span>
                         <span>{question.views || 0} views</span>
+                        <span>•</span>
+                        <span>{question.answerCount || 0} answers</span>
                         <span>•</span>
                         <span>{formatRelativeTime(question.created_at)}</span>
                       </div>
