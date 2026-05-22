@@ -10,6 +10,40 @@ export function DashboardSkeleton() {
         <Skeleton className="h-5 w-96" />
       </div>
 
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-48" />
+        {[1, 2, 3].map((i) => (
+          <Card key={`q-${i}`} className="p-4">
+            <Skeleton className="h-4 w-full mb-2" />
+            <Skeleton className="h-3 w-2/3" />
+          </Card>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-40" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map((i) => (
+            <Card key={`e-${i}`} className="overflow-hidden">
+              <Skeleton className="h-40 w-full rounded-none" />
+              <div className="p-5 space-y-2">
+                <Skeleton className="h-5 w-3/4" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-44" />
+        {[1, 2].map((i) => (
+          <Card key={`n-${i}`} className="p-4">
+            <Skeleton className="h-4 w-full" />
+          </Card>
+        ))}
+      </div>
+
       {/* Quick Actions Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[1, 2, 3].map((i) => (

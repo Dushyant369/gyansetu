@@ -5,6 +5,9 @@ import { DashboardHeader } from "@/components/dashboard-header"
 import { Card } from "@/components/ui/card"
 import { Plus, BookOpen, User, Settings, MessageSquare, HelpCircle, Lightbulb, CheckCircle2 } from "lucide-react"
 import { KarmaLeaderboard } from "@/components/dashboard/karma-leaderboard"
+import { RecentQuestions } from "@/components/dashboard/recent-questions"
+import { RecentNotifications } from "@/components/dashboard/recent-notifications"
+import { CampusEventsSection } from "@/components/events/campus-events-section"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -73,6 +76,12 @@ export default async function DashboardPage() {
               You have {userProfile?.karma_points || 0} karma points. Start asking questions or helping others!
             </p>
           </div>
+
+          <RecentQuestions />
+
+          <CampusEventsSection userRole={userProfile.role} />
+
+          <RecentNotifications userId={user.id} />
 
           {/* Quick Actions */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
