@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import type { User } from "@supabase/supabase-js"
-
-const CONTENT_MANAGER_ROLES = ["admin", "superadmin", "professor"] as const
+import { CONTENT_MANAGER_ROLES } from "@/lib/auth/content-manager-roles"
 
 export type ContentManagerAuthResult =
   | { user: User; role: string; error: null }
@@ -26,8 +25,4 @@ export async function requireContentManager(): Promise<ContentManagerAuthResult>
   }
 
   return { user, role, error: null }
-}
-
-export function isContentManagerRole(role: string): boolean {
-  return CONTENT_MANAGER_ROLES.includes(role as (typeof CONTENT_MANAGER_ROLES)[number])
 }

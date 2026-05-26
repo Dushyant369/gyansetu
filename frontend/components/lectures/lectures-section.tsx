@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Video, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { isContentManagerRole } from "@/lib/auth/require-content-manager"
+import { isContentManagerRole } from "@/lib/auth/content-manager-roles"
 import {
   Dialog,
   DialogContent,
