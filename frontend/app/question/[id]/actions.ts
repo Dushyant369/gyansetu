@@ -489,14 +489,6 @@ export async function acceptAnswer(answerId: string, questionId: string) {
     throw new Error("Only the question author or admins can accept answers")
   }
 
-  // Unaccept any previously accepted answer for this question
-  await supabase
-    .from("answers")
-    .update({ is_accepted: false })
-    .eq("question_id", questionId)
-    .eq("is_accepted", true)
-
-  // Get answer to check if already accepted
   const { data: answer } = await supabase
     .from("answers")
     .select("is_accepted, author_id")
@@ -510,14 +502,51 @@ export async function acceptAnswer(answerId: string, questionId: string) {
   const wasAccepted = answer.is_accepted
   const newAcceptedStatus = !wasAccepted
 
-  // Update answer
-  const { error } = await supabase
+  if (newAcceptedStatus) {
+    const { error: unacceptError } = await supabase
+      .from("answers")
+      .update({ is_accepted: false })
+      .eq("question_id", questionId)
+      .eq("is_accepted", true)
+
+    if (unacceptError) {
+      throw new Error(unacceptError.message || "Failed to update previous accepted answer")
+    }
+  }
+
+  const { data: updatedRows, error } = await supabase
     .from("answers")
     .update({ is_accepted: newAcceptedStatus })
     .eq("id", answerId)
+    .select("id")
 
   if (error) {
     throw new Error(error.message || "Failed to accept answer")
+  }
+
+  if (!updatedRows || updatedRows.length === 0) {
+    throw new Error("You do not have permission to accept this answer")
+  }
+
+  if (newAcceptedStatus) {
+    await supabase
+      .from("questions")
+      .update({
+        accepted_answer_id: answerId,
+        is_resolved: true,
+        resolved: true,
+        resolved_at: new Date().toISOString(),
+        resolved_by: user.id,
+      })
+      .eq("id", questionId)
+  } else {
+    await supabase
+      .from("questions")
+      .update({
+        accepted_answer_id: null,
+      })
+      .eq("id", questionId)
+      .eq("accepted_answer_id", answerId)
   }
 
   // Update karma if accepting (not unaccepting)
@@ -758,48 +787,60 @@ export async function markAsResolved(questionId: string) {
     redirect("/auth/login")
   }
 
-  // Get user role
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
   const userRole = profile?.role || "student"
 
-  // Only admins and superadmins can mark as resolved
-  if (userRole !== "admin" && userRole !== "superadmin") {
-    throw new Error("Only admins and superadmins can mark questions as resolved")
+  if (userRole !== "admin" && userRole !== "superadmin" && userRole !== "professor") {
+    throw new Error("Only admins and professors can mark questions as resolved")
   }
 
-  // Get current resolved status
-  const { data: question } = await supabase.from("questions").select("resolved").eq("id", questionId).single()
+  const { data: question } = await supabase
+    .from("questions")
+    .select("resolved, is_resolved, author_id, title, course_id")
+    .eq("id", questionId)
+    .single()
 
   if (!question) {
     throw new Error("Question not found")
   }
 
-  const newResolvedStatus = !question.resolved
+  const alreadyResolved = question.resolved || question.is_resolved
+  if (alreadyResolved) {
+    return { resolved: true }
+  }
 
-  // Get question details for notification
-  const { data: questionDetails } = await supabase
+  const now = new Date().toISOString()
+  const { data: updated, error } = await supabase
     .from("questions")
-    .select("author_id, title")
+    .update({
+      resolved: true,
+      is_resolved: true,
+      resolved_at: now,
+      resolved_by: user.id,
+    })
     .eq("id", questionId)
-    .single()
-
-  const { error } = await supabase.from("questions").update({ resolved: newResolvedStatus }).eq("id", questionId)
+    .select("id")
 
   if (error) {
     throw new Error(error.message || "Failed to update resolved status")
   }
 
-  // Create notification for question author when marked as resolved
-  if (newResolvedStatus && questionDetails && questionDetails.author_id !== user.id) {
+  if (!updated || updated.length === 0) {
+    throw new Error("You do not have permission to mark this question as resolved")
+  }
+
+  if (question.author_id !== user.id) {
     await supabase.from("notifications").insert({
-      user_id: questionDetails.author_id,
-      message: `Your question "${questionDetails.title.substring(0, 50)}" was marked as resolved!`,
+      user_id: question.author_id,
+      message: `Your question "${question.title.substring(0, 50)}" was marked as resolved!`,
       type: "resolved",
       related_question_id: questionId,
     })
   }
 
   revalidatePath(`/question/${questionId}`)
-  return { resolved: newResolvedStatus }
+  revalidatePath("/resolved-questions")
+  revalidatePath("/admin/assigned-courses")
+  return { resolved: true }
 }
 

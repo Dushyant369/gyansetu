@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
+import { uploadQuestionImage } from "@/lib/media/upload-question-image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -185,25 +186,7 @@ export default function AskQuestionPage() {
 
         if (imageFile) {
           setIsUploading(true)
-          const fileExt = imageFile.name.split(".").pop() || "jpg"
-          const fileName = `${user.id}-question-${Date.now()}.${fileExt}`
-          const filePath = `questions/${fileName}`
-
-          const { error: uploadError } = await supabase.storage
-            .from("qa-images")
-            .upload(filePath, imageFile, {
-              cacheControl: "3600",
-              upsert: true,
-            })
-
-          if (uploadError) {
-            throw new Error(uploadError.message || "Failed to upload image")
-          }
-
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from("qa-images").getPublicUrl(filePath)
-          uploadedImageUrl = publicUrl
+          uploadedImageUrl = await uploadQuestionImage(imageFile, user.id)
           setIsUploading(false)
         }
 

@@ -190,7 +190,7 @@ export function AssignedCoursesView({ courses }: AssignedCoursesViewProps) {
           const updated = { ...prev }
           for (const courseId in updated) {
             updated[courseId] = updated[courseId].map((q) =>
-              q.id === questionId ? { ...q, is_resolved: newStatus } : q
+              q.id === questionId ? { ...q, is_resolved: newStatus, resolved: newStatus } : q
             )
           }
           return updated

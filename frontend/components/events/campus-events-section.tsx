@@ -25,7 +25,8 @@ interface CampusEventsSectionProps {
 }
 
 export function CampusEventsSection({ userRole }: CampusEventsSectionProps) {
-  const canManage = userRole === "admin" || userRole === "superadmin"
+  const canManage =
+    userRole === "admin" || userRole === "superadmin" || userRole === "professor"
   const { toast } = useToast()
 
   const [events, setEvents] = useState<EventWithCreator[]>([])

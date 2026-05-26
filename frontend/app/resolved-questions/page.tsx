@@ -36,7 +36,7 @@ export default async function ResolvedQuestionsPage() {
       profiles!author_id(display_name, email)
     `
     )
-    .or("resolved.eq.true,best_answer_id.not.is.null")
+    .or("resolved.eq.true,is_resolved.eq.true,best_answer_id.not.is.null")
     .order("created_at", { ascending: false })
 
   if (questionsError) {

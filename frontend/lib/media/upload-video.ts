@@ -30,7 +30,7 @@ export async function uploadAnswerVideo(
 
   const supabase = createClient()
   const fileExt = file.name.split(".").pop() || "mp4"
-  const filePath = `${IMAGE_ANSWER_PREFIX}/${userId}/${userId}-video-${Date.now()}.${fileExt}`
+  const filePath = `${userId}/${IMAGE_ANSWER_PREFIX}/${userId}-video-${Date.now()}.${fileExt}`
 
   onProgress?.(25)
 

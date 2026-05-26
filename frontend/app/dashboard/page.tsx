@@ -8,6 +8,8 @@ import { KarmaLeaderboard } from "@/components/dashboard/karma-leaderboard"
 import { RecentQuestions } from "@/components/dashboard/recent-questions"
 import { RecentNotifications } from "@/components/dashboard/recent-notifications"
 import { CampusEventsSection } from "@/components/events/campus-events-section"
+import { LecturesSection } from "@/components/lectures/lectures-section"
+import { ClassroomPollsSection } from "@/components/polls/classroom-polls-section"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -80,6 +82,10 @@ export default async function DashboardPage() {
           <RecentQuestions />
 
           <CampusEventsSection userRole={userProfile.role} />
+
+          <LecturesSection userRole={userProfile.role} />
+
+          <ClassroomPollsSection userRole={userProfile.role} />
 
           <RecentNotifications userId={user.id} />
 

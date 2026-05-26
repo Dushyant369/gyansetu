@@ -1258,5 +1258,6 @@ WITH CHECK (
 -- 7. Set bucket to public and configure storage policies
 -- 8. Run 22-add-campus-events.sql on existing projects if events table missing
 -- 9. Run 23-add-answer-media.sql and set qa-videos bucket to 50MB max file size
+-- 10. Run 24-fix-critical-bugs-and-features.sql for votes RLS, resolved sync, lectures/polls
 -- ============================================
 

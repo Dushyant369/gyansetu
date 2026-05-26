@@ -18,7 +18,8 @@ export async function deleteQuestion(questionId: string) {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
   const userRole = profile?.role || "student"
-  const isAdmin = userRole === "admin" || userRole === "superadmin"
+  const isAdmin =
+    userRole === "admin" || userRole === "superadmin" || userRole === "professor"
 
   if (!isAdmin) {
     throw new Error("Only admins can delete questions")
@@ -73,7 +74,8 @@ export async function markQuestionResolved(questionId: string, resolved: boolean
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
   const userRole = profile?.role || "student"
-  const isAdmin = userRole === "admin" || userRole === "superadmin"
+  const isAdmin =
+    userRole === "admin" || userRole === "superadmin" || userRole === "professor"
 
   if (!isAdmin) {
     throw new Error("Only admins can mark questions as resolved")
@@ -104,17 +106,38 @@ export async function markQuestionResolved(questionId: string, resolved: boolean
   }
   // If question has no course, any admin can manage it
 
-  const { error } = await supabase
+  const updatePayload = resolved
+    ? {
+        is_resolved: true,
+        resolved: true,
+        resolved_at: new Date().toISOString(),
+        resolved_by: user.id,
+      }
+    : {
+        is_resolved: false,
+        resolved: false,
+        resolved_at: null,
+        resolved_by: null,
+      }
+
+  const { data: updated, error } = await supabase
     .from("questions")
-    .update({ is_resolved: resolved })
+    .update(updatePayload)
     .eq("id", questionId)
+    .select("id")
 
   if (error) {
     throw new Error(error.message || "Failed to update question")
   }
 
+  if (!updated || updated.length === 0) {
+    throw new Error("You do not have permission to update this question")
+  }
+
   revalidatePath("/admin/assigned-courses")
+  revalidatePath("/resolved-questions")
   revalidatePath("/dashboard/questions")
+  revalidatePath(`/question/${questionId}`)
   revalidatePath(`/dashboard/questions/${questionId}`)
 }
 

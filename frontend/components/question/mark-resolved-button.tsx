@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2 } from "lucide-react"
 import { markAsResolved } from "@/app/question/[id]/actions"
@@ -13,23 +13,33 @@ interface MarkResolvedButtonProps {
   currentUserRole: string
 }
 
-export function MarkResolvedButton({ questionId, isResolved, currentUserRole }: MarkResolvedButtonProps) {
+export function MarkResolvedButton({ questionId, isResolved: initialResolved, currentUserRole }: MarkResolvedButtonProps) {
+  const [resolved, setResolved] = useState(initialResolved)
   const [isPending, startTransition] = useTransition()
   const { toast } = useToast()
   const router = useRouter()
 
-  // Only show for admins and superadmins
-  if (currentUserRole !== "admin" && currentUserRole !== "superadmin") {
+  useEffect(() => {
+    setResolved(initialResolved)
+  }, [initialResolved])
+
+  if (currentUserRole !== "admin" && currentUserRole !== "superadmin" && currentUserRole !== "professor") {
     return null
   }
 
   const handleMarkResolved = async () => {
+    if (resolved) return
+
     startTransition(async () => {
       try {
         const result = await markAsResolved(questionId)
+        if (!result.resolved) {
+          throw new Error("Could not mark question as resolved. Check your permissions.")
+        }
+        setResolved(true)
         toast({
           title: "Success",
-          description: result.resolved ? "Question marked as resolved!" : "Question marked as unresolved",
+          description: "Question marked as resolved!",
         })
         router.refresh()
       } catch (error) {
@@ -42,16 +52,30 @@ export function MarkResolvedButton({ questionId, isResolved, currentUserRole }: 
     })
   }
 
+  if (resolved) {
+    return (
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled
+        className="gap-2 bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30"
+      >
+        <CheckCircle2 className="w-4 h-4" />
+        Resolved
+      </Button>
+    )
+  }
+
   return (
     <Button
-      variant={isResolved ? "secondary" : "outline"}
+      variant="outline"
       size="sm"
       onClick={handleMarkResolved}
       disabled={isPending}
       className="gap-2 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20"
     >
       <CheckCircle2 className="w-4 h-4" />
-      {isResolved ? "Mark as Unresolved" : "Mark as Resolved"}
+      Mark as Resolved
     </Button>
   )
 }

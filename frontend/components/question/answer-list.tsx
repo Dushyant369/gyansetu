@@ -229,23 +229,8 @@ export function AnswerList({ answers: initialAnswers, isQuestionAuthor, currentU
             throw new Error("You must be signed in to upload images.")
           }
 
-          const fileExt = imageFile.name.split(".").pop() || "jpg"
-          const fileName = `${user.id}-reply-${Date.now()}.${fileExt}`
-          const filePath = `replies/${fileName}`
-
-          const { error: uploadError } = await supabase.storage.from("qa-images").upload(filePath, imageFile, {
-            cacheControl: "3600",
-            upsert: true,
-          })
-
-          if (uploadError) {
-            throw new Error(uploadError.message || "Failed to upload image")
-          }
-
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from("qa-images").getPublicUrl(filePath)
-          uploadedImageUrl = publicUrl
+          const { uploadReplyImage } = await import("@/lib/media/upload-question-image")
+          uploadedImageUrl = await uploadReplyImage(imageFile, user.id)
           setIsReplyUploading((prev) => ({ ...prev, [answerId]: false }))
         }
 

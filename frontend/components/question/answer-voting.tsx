@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { ThumbsUp, ThumbsDown } from "lucide-react"
 import { voteAnswer } from "@/app/question/[id]/voting-actions"
 import { useToast } from "@/hooks/use-toast"
@@ -28,6 +28,14 @@ export function AnswerVoting({
   const [score, setScore] = useState(initialScore)
   const [vote, setVote] = useState<number | null>(userVote)
   const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    setScore(initialScore)
+  }, [initialScore])
+
+  useEffect(() => {
+    setVote(userVote)
+  }, [userVote])
   const { toast } = useToast()
   const router = useRouter()
 

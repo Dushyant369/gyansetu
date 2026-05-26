@@ -30,7 +30,7 @@ export async function uploadAnswerImage(
 
   const supabase = createClient()
   const fileExt = file.name.split(".").pop() || "jpg"
-  const filePath = `${IMAGE_ANSWER_PREFIX}/${userId}/${userId}-answer-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`
+  const filePath = `${userId}/${IMAGE_ANSWER_PREFIX}/${userId}-answer-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`
 
   onProgress?.(40)
 

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
+import { uploadQuestionImage } from "@/lib/media/upload-question-image"
 import { createQuestion } from "@/app/courses/[id]/questions/actions"
 import { Button } from "@/components/ui/button"
 import { Plus, Upload } from "lucide-react"
@@ -37,6 +38,7 @@ export function AskQuestionModal({ courseId }: AskQuestionModalProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [fieldErrors, setFieldErrors] = useState<{ title?: string; image?: string }>({})
   const { toast } = useToast()
   const router = useRouter()
@@ -50,9 +52,9 @@ export function AskQuestionModal({ courseId }: AskQuestionModalProps) {
       return
     }
 
-    const allowedTypes = ["image/jpeg", "image/png"]
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"]
     if (!allowedTypes.includes(file.type) || file.size > 5 * 1024 * 1024) {
-      const message = "Only JPG or PNG images under 5MB are allowed."
+      const message = "Only JPG, PNG, or WebP images under 5MB are allowed."
       toast({
         title: "Invalid image",
         description: message,
@@ -117,6 +119,7 @@ export function AskQuestionModal({ courseId }: AskQuestionModalProps) {
 
         if (imageFile) {
           setIsUploading(true)
+          setUploadProgress(0)
           const supabase = createClient()
           const {
             data: { user },
@@ -127,26 +130,7 @@ export function AskQuestionModal({ courseId }: AskQuestionModalProps) {
             throw new Error("You must be signed in to upload images.")
           }
 
-          const fileExt = imageFile.name.split(".").pop() || "jpg"
-          const fileName = `${user.id}-question-${Date.now()}.${fileExt}`
-          const filePath = `questions/${fileName}`
-
-          const { error: uploadError } = await supabase.storage
-            .from("qa-images")
-            .upload(filePath, imageFile, {
-              cacheControl: "3600",
-              upsert: true,
-            })
-
-          if (uploadError) {
-            throw new Error(uploadError.message || "Failed to upload image")
-          }
-
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from("qa-images").getPublicUrl(filePath)
-
-          uploadedImageUrl = publicUrl
+          uploadedImageUrl = await uploadQuestionImage(imageFile, user.id, setUploadProgress)
         }
 
         await createQuestion(courseId, title.trim(), content.trim(), tagsArray, isAnonymous, uploadedImageUrl)

@@ -52,13 +52,10 @@ export default async function QuestionPage({
 
   const bestAnswerId = question?.best_answer_id || null
 
-  // Calculate question vote score
-  const { data: questionVotes } = await supabase
-    .from("question_votes")
-    .select("vote")
-    .eq("question_id", questionId)
-
-  const questionScore = questionVotes?.reduce((sum, v) => sum + v.vote, 0) || 0
+  const { data: questionScoreData } = await supabase.rpc("get_question_vote_score", {
+    question_uuid: questionId,
+  })
+  const questionScore = typeof questionScoreData === "number" ? questionScoreData : 0
 
   // Get user's vote on this question
   const { data: userQuestionVote } = await supabase
@@ -110,13 +107,8 @@ export default async function QuestionPage({
     .order("is_accepted", { ascending: false })
     .order("created_at", { ascending: true })
 
-  // Get vote scores for all answers
   const answerIds = answers?.map((a) => a.id) || []
-  const { data: answerVotes } = answerIds.length > 0
-    ? await supabase.from("answer_votes").select("answer_id, vote").in("answer_id", answerIds)
-    : { data: [] }
 
-  // Get user's votes on all answers
   const { data: userAnswerVotes } = answerIds.length > 0
     ? await supabase
         .from("answer_votes")
@@ -125,13 +117,19 @@ export default async function QuestionPage({
         .eq("user_id", user.id)
     : { data: [] }
 
-  // Calculate scores and attach user votes to answers
-  const answersWithVotes = answers?.map((answer) => {
-    const votes = answerVotes?.filter((v) => v.answer_id === answer.id) || []
-    const score = votes.reduce((sum, v) => sum + v.vote, 0)
-    const userVote = userAnswerVotes?.find((v) => v.answer_id === answer.id)?.vote || null
-    return { ...answer, voteScore: score, userVote }
-  }) || []
+  const answerScores = await Promise.all(
+    answerIds.map(async (aid) => {
+      const { data } = await supabase.rpc("get_answer_vote_score", { answer_uuid: aid })
+      return { id: aid, score: typeof data === "number" ? data : 0 }
+    })
+  )
+
+  const answersWithVotes =
+    answers?.map((answer) => {
+      const score = answerScores.find((s) => s.id === answer.id)?.score ?? 0
+      const userVote = userAnswerVotes?.find((v) => v.answer_id === answer.id)?.vote ?? null
+      return { ...answer, voteScore: score, userVote }
+    }) ?? []
 
   const isQuestionAuthor = question.author_id === user.id
   const isCurrentUserAdmin = currentUserRole === "admin" || currentUserRole === "superadmin"
@@ -234,7 +232,7 @@ export default async function QuestionPage({
               <div className="pt-2">
                 <MarkResolvedButton
                   questionId={questionId}
-                  isResolved={question.resolved || false}
+                  isResolved={!!(question.resolved || question.is_resolved)}
                   currentUserRole={currentUserRole}
                 />
               </div>

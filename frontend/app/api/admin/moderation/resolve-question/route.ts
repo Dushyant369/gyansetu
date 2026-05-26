@@ -28,11 +28,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Update question to resolved
-    const { error } = await supabase.from("questions").update({ is_resolved: true }).eq("id", question_id)
+    const now = new Date().toISOString()
+    const { data: updated, error } = await supabase
+      .from("questions")
+      .update({
+        is_resolved: true,
+        resolved: true,
+        resolved_at: now,
+        resolved_by: user.id,
+      })
+      .eq("id", question_id)
+      .select("id")
 
     if (error) {
       console.error("Error resolving question:", error)
       return NextResponse.json({ error: "Failed to resolve question" }, { status: 500 })
+    }
+
+    if (!updated || updated.length === 0) {
+      return NextResponse.json({ error: "Question not found or permission denied" }, { status: 403 })
     }
 
     return NextResponse.json({ success: true })
