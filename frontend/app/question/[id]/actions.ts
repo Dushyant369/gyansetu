@@ -3,8 +3,27 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import type { AnswerMediaInput } from "@/lib/media/types"
+import {
+  hasAnswerBody,
+  normalizeAnswerMediaInput,
+  toAnswerDbFields,
+} from "@/lib/answers/validation"
 
-export async function createAnswer(questionId: string, content: string, imageUrl?: string | null) {
+export type CreateAnswerMediaArg = AnswerMediaInput | string | null | undefined
+
+function resolveMediaArg(media?: CreateAnswerMediaArg): ReturnType<typeof normalizeAnswerMediaInput> {
+  if (typeof media === "string") {
+    return normalizeAnswerMediaInput({ imageUrls: media ? [media] : [] })
+  }
+  return normalizeAnswerMediaInput(media ?? {})
+}
+
+export async function createAnswer(
+  questionId: string,
+  content: string,
+  media?: CreateAnswerMediaArg
+) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -16,9 +35,11 @@ export async function createAnswer(questionId: string, content: string, imageUrl
     throw new Error("You must be signed in to post an answer")
   }
 
-  // Validate input
-  if (!content || !content.trim()) {
-    throw new Error("Answer content is required")
+  const normalizedMedia = resolveMediaArg(media)
+  const trimmedContent = (content ?? "").trim()
+
+  if (!hasAnswerBody(trimmedContent, normalizedMedia)) {
+    throw new Error("Add answer text or attach images, video, or a video link")
   }
 
   if (!questionId) {
@@ -53,15 +74,16 @@ export async function createAnswer(questionId: string, content: string, imageUrl
     throw new Error("You cannot answer your own question")
   }
 
-  // Insert answer
+  const mediaFields = toAnswerDbFields(normalizedMedia)
+
   const { data, error } = await supabase
     .from("answers")
     .insert({
       question_id: questionId,
       author_id: user.id,
-      content: content.trim(),
+      content: trimmedContent,
       upvoted_by: [],
-      image_url: imageUrl || null,
+      ...mediaFields,
     })
     .select()
     .single()

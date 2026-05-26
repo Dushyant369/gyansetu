@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import {
   Dialog,
   DialogContent,
@@ -14,13 +14,28 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { updateAnswer } from "@/app/question/[id]/edit-actions"
-import Image from "next/image"
+import { ImageUploadField } from "@/components/media/image-upload-field"
+import { VideoUploadField } from "@/components/media/video-upload-field"
+import { VideoLinkInput } from "@/components/media/video-link-input"
+import { AnswerMediaDisplay } from "@/components/media/answer-media-display"
+import { UploadProgress } from "@/components/media/upload-progress"
+import type { PendingImage } from "@/lib/media/types"
+import {
+  getAnswerImageUrls,
+  getAnswerVideoLinks,
+  getAnswerVideoUrls,
+} from "@/lib/answers/normalize-answer-media"
+import { uploadAnswerMediaFiles } from "@/lib/answers/submit-answer-media"
+import { hasAnswerBody, normalizeAnswerMediaInput } from "@/lib/answers/validation"
 
 interface EditAnswerModalProps {
   answer: {
     id: string
     content: string
     image_url?: string | null
+    image_urls?: string[] | null
+    video_urls?: string[] | null
+    video_links?: string[] | null
   }
   questionId: string
   open: boolean
@@ -28,16 +43,48 @@ interface EditAnswerModalProps {
   onSuccess: () => void
 }
 
-export function EditAnswerModal({ answer, questionId, open, onOpenChange, onSuccess }: EditAnswerModalProps) {
+export function EditAnswerModal({
+  answer,
+  questionId,
+  open,
+  onOpenChange,
+  onSuccess,
+}: EditAnswerModalProps) {
   const [content, setContent] = useState(answer.content)
+  const [keptImageUrls, setKeptImageUrls] = useState<string[]>([])
+  const [keptVideoUrls, setKeptVideoUrls] = useState<string[]>([])
+  const [videoLinks, setVideoLinks] = useState<string[]>([])
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [videoPreview, setVideoPreview] = useState<string | null>(null)
+  const [uploadLabel, setUploadLabel] = useState("")
+  const [uploadPercent, setUploadPercent] = useState(0)
   const [isPending, startTransition] = useTransition()
   const { toast } = useToast()
 
+  useEffect(() => {
+    if (!open) return
+    setContent(answer.content)
+    setKeptImageUrls(getAnswerImageUrls(answer))
+    setKeptVideoUrls(getAnswerVideoUrls(answer))
+    setVideoLinks(getAnswerVideoLinks(answer))
+    setPendingImages([])
+    setVideoFile(null)
+    setVideoPreview(null)
+  }, [open, answer])
+
+  const busy = isPending || (uploadPercent > 0 && uploadPercent < 100)
+
   const handleSave = () => {
-    if (!content.trim()) {
+    const trimmed = content.trim()
+    const hasNewMedia = pendingImages.length > 0 || videoFile !== null
+    const hasKept =
+      keptImageUrls.length > 0 || keptVideoUrls.length > 0 || videoLinks.length > 0
+
+    if (!trimmed && !hasNewMedia && !hasKept) {
       toast({
         title: "Validation error",
-        description: "Answer content is required.",
+        description: "Add answer text or keep/add media.",
         variant: "destructive",
       })
       return
@@ -45,7 +92,35 @@ export function EditAnswerModal({ answer, questionId, open, onOpenChange, onSucc
 
     startTransition(async () => {
       try {
-        await updateAnswer(answer.id, questionId, content.trim())
+        setUploadPercent(0)
+        let newMedia = normalizeAnswerMediaInput({})
+
+        if (pendingImages.length > 0 || videoFile) {
+          newMedia = normalizeAnswerMediaInput(
+            await uploadAnswerMediaFiles({
+            pendingImages,
+            videoFile,
+            videoLinks: [],
+            onProgress: (label, percent) => {
+              setUploadLabel(label)
+              setUploadPercent(percent)
+            },
+          })
+          )
+        }
+
+        const merged = normalizeAnswerMediaInput({
+          imageUrls: [...keptImageUrls, ...newMedia.imageUrls ?? []],
+          videoUrls: videoFile ? (newMedia.videoUrls ?? []) : keptVideoUrls,
+          videoLinks,
+        })
+
+        if (!hasAnswerBody(trimmed, merged)) {
+          throw new Error("Answer must include text or media")
+        }
+
+        await updateAnswer(answer.id, questionId, trimmed, merged)
+
         toast({
           title: "Answer updated",
           description: "Your answer has been updated successfully.",
@@ -58,12 +133,14 @@ export function EditAnswerModal({ answer, questionId, open, onOpenChange, onSucc
           description: error instanceof Error ? error.message : "Failed to update answer",
           variant: "destructive",
         })
+      } finally {
+        setUploadLabel("")
+        setUploadPercent(0)
       }
     })
   }
 
   const handleClose = () => {
-    setContent(answer.content)
     onOpenChange(false)
   }
 
@@ -72,7 +149,7 @@ export function EditAnswerModal({ answer, questionId, open, onOpenChange, onSucc
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Answer</DialogTitle>
-          <DialogDescription>Update your answer content.</DialogDescription>
+          <DialogDescription>Update your answer text and media.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
@@ -82,37 +159,70 @@ export function EditAnswerModal({ answer, questionId, open, onOpenChange, onSucc
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Enter answer content"
-              rows={8}
+              rows={6}
               className="resize-none"
-              disabled={isPending}
+              disabled={busy}
             />
           </div>
-          {answer.image_url && (
+
+          {(keptImageUrls.length > 0 || keptVideoUrls.length > 0) && (
             <div className="space-y-2">
-              <Label>Current Image</Label>
-              <div className="relative mt-2 w-full max-w-md overflow-hidden rounded-lg border border-border">
-                <Image
-                  src={answer.image_url}
-                  alt="Current answer image"
-                  width={600}
-                  height={400}
-                  className="w-full h-auto object-cover"
-                />
-                <p className="text-xs text-muted-foreground mt-1">Current image (image updates coming soon)</p>
-              </div>
+              <Label>Current media</Label>
+              <AnswerMediaDisplay
+                answer={{
+                  image_urls: keptImageUrls,
+                  video_urls: keptVideoUrls,
+                  video_links: [],
+                }}
+              />
+              {keptImageUrls.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setKeptImageUrls([])}
+                >
+                  Remove all images
+                </Button>
+              )}
+              {keptVideoUrls.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setKeptVideoUrls([])}
+                >
+                  Remove uploaded video
+                </Button>
+              )}
             </div>
           )}
+
+          <ImageUploadField images={pendingImages} onChange={setPendingImages} disabled={busy} />
+          <VideoUploadField
+            file={videoFile}
+            previewUrl={videoPreview}
+            onChange={(f, preview) => {
+              setVideoFile(f)
+              setVideoPreview(preview)
+              if (f) setKeptVideoUrls([])
+            }}
+            disabled={busy}
+          />
+          <VideoLinkInput links={videoLinks} onChange={setVideoLinks} disabled={busy} />
+          <UploadProgress label={uploadLabel} percent={uploadPercent} />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isPending}>
+          <Button variant="outline" onClick={handleClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isPending || !content.trim()}>
-            {isPending ? "Saving..." : "Save Changes"}
+          <Button onClick={handleSave} disabled={busy}>
+            {busy ? "Saving…" : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
-

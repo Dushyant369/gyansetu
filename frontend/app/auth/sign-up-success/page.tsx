@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { SUPERADMIN_EMAIL, normalizeAuthEmail } from "@/lib/auth/constants"
 
 export default function SignUpSuccessPage() {
   const [email, setEmail] = useState("")
@@ -78,8 +79,18 @@ export default function SignUpSuccessPage() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Check your email</h1>
             <p className="text-sm text-muted-foreground mt-2">
-              We've sent you a confirmation link. Please click it to verify your email and activate your account.
+              We&apos;ve sent you a confirmation link. Please click it to verify your email and activate your account.
+              You cannot sign in until the link is opened.
             </p>
+            {email && normalizeAuthEmail(email) === SUPERADMIN_EMAIL && (
+              <Alert className="mt-4 text-left bg-primary/5 border-primary/20">
+                <AlertDescription className="text-sm">
+                  SuperAdmin account: after confirming email, run{" "}
+                  <code className="text-xs">11-set-superadmin-manually.sql</code> in Supabase if your role is not
+                  superadmin yet. Or create the user in Authentication → Users with Auto Confirm enabled.
+                </AlertDescription>
+              </Alert>
+            )}
             {email && (
               <p className="text-xs text-muted-foreground mt-1">
                 Email sent to: <span className="font-mono">{email}</span>

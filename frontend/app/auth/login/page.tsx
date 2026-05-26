@@ -12,6 +12,12 @@ import { Card } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { Eye, EyeOff } from "lucide-react"
+import {
+  INVALID_COLLEGE_EMAIL_MESSAGE,
+  isAllowedAuthEmail,
+  normalizeAuthEmail,
+} from "@/lib/auth/constants"
+import { getLoginErrorMessage } from "@/lib/auth/messages"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -20,23 +26,10 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({})
+  const [showResendHint, setShowResendHint] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
-
-  const studentPattern = /^[0-9]{9}@gkv\.ac\.in$/i
-  const teacherPattern = /^[a-zA-Z.]+@gkv\.ac\.in$/i
-  const superAdminEmail = "icygenius08@gmail.com"
-  const invalidEmailMessage =
-    "Only GKV-registered email addresses are allowed. Please use your official college email."
-
-  const isCollegeEmail = (value: string) => {
-    const normalized = value.trim().toLowerCase()
-    // SuperAdmin can login with any email (bypass validation)
-    if (normalized === superAdminEmail) {
-      return true
-    }
-    return studentPattern.test(normalized) || teacherPattern.test(normalized)
-  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,8 +38,8 @@ export default function LoginPage() {
 
     const errors: typeof fieldErrors = {}
 
-    if (!isCollegeEmail(email)) {
-      errors.email = invalidEmailMessage
+    if (!isAllowedAuthEmail(email)) {
+      errors.email = INVALID_COLLEGE_EMAIL_MESSAGE
     }
 
     if (!password.trim()) {
@@ -64,9 +57,11 @@ export default function LoginPage() {
     }
 
     setLoading(true)
+    setShowResendHint(false)
+    setResetSent(false)
 
     try {
-      const normalizedEmail = email.trim().toLowerCase()
+      const normalizedEmail = normalizeAuthEmail(email)
       const supabase = createClient()
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
@@ -79,13 +74,52 @@ export default function LoginPage() {
         router.push("/dashboard")
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Login failed"
+      const raw = err instanceof Error ? err.message : "Login failed"
+      const message = getLoginErrorMessage(raw, email)
       setError(message)
+      setShowResendHint(
+        raw.toLowerCase().includes("invalid login credentials") ||
+          raw.toLowerCase().includes("email not confirmed")
+      )
       toast({
-        title: "Error",
-        description: message,
+        title: "Unable to sign in",
+        description: raw.toLowerCase().includes("invalid login credentials")
+          ? "Check password, sign up, or confirm your email first."
+          : raw,
         variant: "destructive",
       })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    setError("")
+    setResetSent(false)
+
+    if (!isAllowedAuthEmail(email)) {
+      setFieldErrors({ email: INVALID_COLLEGE_EMAIL_MESSAGE })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const normalizedEmail = normalizeAuthEmail(email)
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+      const supabase = createClient()
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: `${appUrl}/auth/callback`,
+      })
+      if (resetError) throw resetError
+      setResetSent(true)
+      toast({
+        title: "Check your email",
+        description: "Password reset instructions were sent if this account exists.",
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to send reset email"
+      setError(message)
+      toast({ title: "Error", description: message, variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -163,10 +197,35 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-                <p className="text-sm text-destructive">{error}</p>
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md space-y-2">
+                <p className="text-sm text-destructive whitespace-pre-line">{error}</p>
+                {showResendHint && email.trim() && (
+                  <Link
+                    href={`/auth/sign-up-success?email=${encodeURIComponent(normalizeAuthEmail(email))}`}
+                    className="text-sm text-primary hover:underline font-medium block"
+                  >
+                    Resend confirmation email
+                  </Link>
+                )}
               </div>
             )}
+
+            {resetSent && (
+              <p className="text-sm text-green-600 dark:text-green-400">
+                Password reset email sent. Check your inbox.
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={loading || !email.trim()}
+                className="text-sm text-primary hover:underline disabled:opacity-50"
+              >
+                Forgot password?
+              </button>
+            </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in..." : "Sign in"}

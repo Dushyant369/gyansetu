@@ -3,6 +3,17 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
+import type { AnswerMediaInput } from "@/lib/media/types"
+import {
+  getAnswerImageUrls,
+  getAnswerVideoUrls,
+} from "@/lib/answers/normalize-answer-media"
+import { removeUrlsFromStorage, removeAnswerMediaFromStorage } from "@/lib/answers/storage-cleanup"
+import {
+  hasAnswerBody,
+  normalizeAnswerMediaInput,
+  toAnswerDbFields,
+} from "@/lib/answers/validation"
 
 export async function updateQuestion(questionId: string, title: string, content: string) {
   const supabase = await createClient()
@@ -133,7 +144,12 @@ export async function deleteQuestion(questionId: string) {
   return { success: true }
 }
 
-export async function updateAnswer(answerId: string, questionId: string, content: string) {
+export async function updateAnswer(
+  answerId: string,
+  questionId: string,
+  content: string,
+  media?: AnswerMediaInput
+) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -143,8 +159,11 @@ export async function updateAnswer(answerId: string, questionId: string, content
     redirect("/auth/login")
   }
 
-  if (!content.trim()) {
-    throw new Error("Answer content is required")
+  const normalizedMedia = normalizeAnswerMediaInput(media ?? {})
+  const trimmedContent = content.trim()
+
+  if (!hasAnswerBody(trimmedContent, normalizedMedia)) {
+    throw new Error("Add answer text or attach images, video, or a video link")
   }
 
   // Get user role
@@ -160,7 +179,7 @@ export async function updateAnswer(answerId: string, questionId: string, content
   // Get answer to check author
   const { data: answer } = await supabase
     .from("answers")
-    .select("author_id")
+    .select("author_id, image_url, image_urls, video_urls, video_links")
     .eq("id", answerId)
     .single()
 
@@ -189,10 +208,19 @@ export async function updateAnswer(answerId: string, questionId: string, content
     }
   }
 
+  const oldImages = getAnswerImageUrls(answer)
+  const oldVideos = getAnswerVideoUrls(answer)
+  const mediaFields = toAnswerDbFields(normalizedMedia)
+
+  const removedImages = oldImages.filter((u) => !mediaFields.image_urls.includes(u))
+  const removedVideos = oldVideos.filter((u) => !mediaFields.video_urls.includes(u))
+  await removeUrlsFromStorage(removedImages, removedVideos)
+
   const { error } = await supabase
     .from("answers")
     .update({
-      content: content.trim(),
+      content: trimmedContent,
+      ...mediaFields,
       updated_at: new Date().toISOString(),
     })
     .eq("id", answerId)
@@ -228,7 +256,7 @@ export async function deleteAnswer(answerId: string, questionId: string) {
   // Get answer to check author
   const { data: answer } = await supabase
     .from("answers")
-    .select("author_id, image_url")
+    .select("author_id, image_url, image_urls, video_urls, video_links")
     .eq("id", answerId)
     .single()
 
@@ -257,13 +285,7 @@ export async function deleteAnswer(answerId: string, questionId: string) {
     }
   }
 
-  // Delete image from storage if exists
-  if (answer.image_url) {
-    const imagePath = answer.image_url.split("/storage/v1/object/public/qa-images/")[1]
-    if (imagePath) {
-      await supabase.storage.from("qa-images").remove([imagePath])
-    }
-  }
+  await removeAnswerMediaFromStorage(answer)
 
   const { error } = await supabase.from("answers").delete().eq("id", answerId)
 

@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect } from "react"
 import Image from "next/image"
+import { AnswerMediaDisplay } from "@/components/media/answer-media-display"
 import { acceptAnswer, createReply, markBestAnswer } from "@/app/question/[id]/actions"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -42,6 +43,9 @@ interface Answer {
   upvoted_by: string[] | null
   created_at: string
   image_url?: string | null
+  image_urls?: string[] | null
+  video_urls?: string[] | null
+  video_links?: string[] | null
   voteScore?: number
   userVote?: number | null
   profiles: {
@@ -370,17 +374,7 @@ export function AnswerList({ answers: initialAnswers, isQuestionAuthor, currentU
                 </Badge>
               )}
 
-              {answer.image_url && (
-                <div className="overflow-hidden rounded-lg border border-border bg-card/80">
-                  <Image
-                    src={answer.image_url}
-                    alt="Answer attachment"
-                    width={1200}
-                    height={800}
-                    className="w-full h-auto object-cover"
-                  />
-                </div>
-              )}
+              <AnswerMediaDisplay answer={answer} />
 
               <div className="prose prose-sm max-w-none">
                 <p className="text-foreground whitespace-pre-wrap">{answer.content}</p>
@@ -622,6 +616,9 @@ export function AnswerList({ answers: initialAnswers, isQuestionAuthor, currentU
             id: answer.id,
             content: answer.content,
             image_url: answer.image_url,
+            image_urls: answer.image_urls,
+            video_urls: answer.video_urls,
+            video_links: answer.video_links,
           }}
           questionId={questionId}
           open={editingAnswerId === answer.id}

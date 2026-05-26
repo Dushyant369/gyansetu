@@ -12,6 +12,12 @@ import { Card } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { Eye, EyeOff } from "lucide-react"
+import {
+  INVALID_COLLEGE_EMAIL_MESSAGE,
+  isAllowedAuthEmail,
+  normalizeAuthEmail,
+} from "@/lib/auth/constants"
+import { getSignUpErrorMessage } from "@/lib/auth/messages"
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
@@ -24,19 +30,6 @@ export default function SignUpPage() {
   const router = useRouter()
   const { toast } = useToast()
 
-  const studentPattern = /^[0-9]{9}@gkv\.ac\.in$/i
-  const teacherPattern = /^[a-zA-Z.]+@gkv\.ac\.in$/i
-  const superAdminEmail = "icygenius08@gmail.com"
-  const invalidEmailMessage =
-    "Only GKV-registered email addresses are allowed. Please use your official college email."
-
-  const isCollegeEmail = (value: string) => {
-    const normalized = value.trim().toLowerCase()
-    if (normalized === superAdminEmail) {
-      return true
-    }
-    return studentPattern.test(normalized) || teacherPattern.test(normalized)
-  }
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,8 +42,8 @@ export default function SignUpPage() {
       errors.displayName = "Full name is required."
     }
 
-    if (!isCollegeEmail(email)) {
-      errors.email = invalidEmailMessage
+    if (!isAllowedAuthEmail(email)) {
+      errors.email = INVALID_COLLEGE_EMAIL_MESSAGE
     }
 
     const passwordStrength =
@@ -73,7 +66,7 @@ export default function SignUpPage() {
     setLoading(true)
 
     try {
-      const normalizedEmail = email.trim().toLowerCase()
+      const normalizedEmail = normalizeAuthEmail(email)
       const supabase = createClient()
       // Use environment variable if available, otherwise fall back to window.location.origin
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
@@ -103,7 +96,8 @@ export default function SignUpPage() {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Sign up failed"
+      const raw = err instanceof Error ? err.message : "Sign up failed"
+      const message = getSignUpErrorMessage(raw)
       setError(message)
       toast({
         title: "Error",
