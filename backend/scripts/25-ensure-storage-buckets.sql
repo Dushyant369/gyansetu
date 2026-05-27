@@ -145,3 +145,15 @@ USING (
   bucket_id = 'event-images'
   AND EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'superadmin', 'professor'))
 );
+
+-- Answer multimedia columns (same as scripts 23 / 26)
+ALTER TABLE answers ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE answers ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE answers ADD COLUMN IF NOT EXISTS video_urls TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE answers ADD COLUMN IF NOT EXISTS video_links TEXT[] NOT NULL DEFAULT '{}';
+
+UPDATE answers
+SET image_urls = ARRAY[image_url]
+WHERE image_url IS NOT NULL
+  AND image_url <> ''
+  AND (image_urls IS NULL OR cardinality(image_urls) = 0);

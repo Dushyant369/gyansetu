@@ -5,19 +5,12 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import type { AnswerMediaInput } from "@/lib/media/types"
 import {
-  hasAnswerBody,
-  normalizeAnswerMediaInput,
-  toAnswerDbFields,
-} from "@/lib/answers/validation"
+  insertAnswerWithFallback,
+  serializeAnswerForClient,
+  type CreateAnswerMediaArg,
+} from "@/lib/answers/insert-answer"
 
-export type CreateAnswerMediaArg = AnswerMediaInput | string | null | undefined
-
-function resolveMediaArg(media?: CreateAnswerMediaArg): ReturnType<typeof normalizeAnswerMediaInput> {
-  if (typeof media === "string") {
-    return normalizeAnswerMediaInput({ imageUrls: media ? [media] : [] })
-  }
-  return normalizeAnswerMediaInput(media ?? {})
-}
+export type { CreateAnswerMediaArg }
 
 export async function createAnswer(
   questionId: string,
@@ -33,13 +26,6 @@ export async function createAnswer(
   if (authError || !user) {
     console.error("Auth error:", authError)
     throw new Error("You must be signed in to post an answer")
-  }
-
-  const normalizedMedia = resolveMediaArg(media)
-  const trimmedContent = (content ?? "").trim()
-
-  if (!hasAnswerBody(trimmedContent, normalizedMedia)) {
-    throw new Error("Add answer text or attach images, video, or a video link")
   }
 
   if (!questionId) {
@@ -74,34 +60,13 @@ export async function createAnswer(
     throw new Error("You cannot answer your own question")
   }
 
-  const mediaFields = toAnswerDbFields(normalizedMedia)
-
-  const { data, error } = await supabase
-    .from("answers")
-    .insert({
-      question_id: questionId,
-      author_id: user.id,
-      content: trimmedContent || "",
-      ...mediaFields,
-    })
-    .select("id, question_id, author_id, content, is_accepted, created_at, updated_at")
-    .single()
-
-  if (error) {
-    console.error("Answer insert error:", error)
-    // Provide more specific error messages
-    if (error.code === "42501") {
-      throw new Error("Permission denied. Please check your account permissions.")
-    } else if (error.code === "23503") {
-      throw new Error("Invalid question or user reference.")
-    } else if (error.code === "23505") {
-      throw new Error("This answer already exists.")
-    }
-    throw new Error(error.message || "Failed to create answer. Please try again.")
-  }
-
-  if (!data) {
-    throw new Error("Answer was not created. Please try again.")
+  let data
+  try {
+    const result = await insertAnswerWithFallback(supabase, questionId, user.id, content, media)
+    data = result.data
+  } catch (err) {
+    console.error("Answer insert error:", err)
+    throw err instanceof Error ? err : new Error("Failed to create answer. Please try again.")
   }
 
   // Create notification for question author (fire-and-forget, don't crash on failure)
@@ -122,15 +87,7 @@ export async function createAnswer(
   // Return only plain serializable fields – never return the raw DB row directly
   // as it may contain Date objects or other non-serializable values that crash
   // Next.js Server Action serialization.
-  return {
-    id: data.id as string,
-    question_id: data.question_id as string,
-    author_id: data.author_id as string,
-    content: (data.content as string) ?? "",
-    is_accepted: Boolean(data.is_accepted),
-    created_at: String(data.created_at ?? ""),
-    updated_at: String(data.updated_at ?? ""),
-  }
+  return serializeAnswerForClient(data)
 }
 
 export async function createReply(answerId: string, questionId: string, content: string, imageUrl?: string | null) {

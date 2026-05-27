@@ -16,6 +16,7 @@ import { QuestionVoting } from "@/components/question/question-voting"
 import { ReportButton } from "@/components/question/report-button"
 import { QuestionActions } from "@/components/question/question-actions"
 import { MarkResolvedButton } from "@/components/question/mark-resolved-button"
+import { getAnswerVoteScores, getQuestionVoteScore } from "@/lib/answers/vote-scores"
 
 export default async function QuestionPage({
   params,
@@ -52,10 +53,7 @@ export default async function QuestionPage({
 
   const bestAnswerId = question?.best_answer_id || null
 
-  const { data: questionScoreData } = await supabase.rpc("get_question_vote_score", {
-    question_uuid: questionId,
-  })
-  const questionScore = typeof questionScoreData === "number" ? questionScoreData : 0
+  const questionScore = await getQuestionVoteScore(supabase, questionId)
 
   // Get user's vote on this question
   const { data: userQuestionVote } = await supabase
@@ -117,22 +115,20 @@ export default async function QuestionPage({
         .eq("user_id", user.id)
     : { data: [] }
 
-  const answerScores = await Promise.all(
-    answerIds.map(async (aid) => {
-      const { data } = await supabase.rpc("get_answer_vote_score", { answer_uuid: aid })
-      return { id: aid, score: typeof data === "number" ? data : 0 }
-    })
-  )
+  const answerScoreMap = await getAnswerVoteScores(supabase, answerIds)
 
   const answersWithVotes =
     answers?.map((answer) => {
-      const score = answerScores.find((s) => s.id === answer.id)?.score ?? 0
+      const score = answerScoreMap[answer.id] ?? 0
       const userVote = userAnswerVotes?.find((v) => v.answer_id === answer.id)?.vote ?? null
       return { ...answer, voteScore: score, userVote }
     }) ?? []
 
   const isQuestionAuthor = question.author_id === user.id
-  const isCurrentUserAdmin = currentUserRole === "admin" || currentUserRole === "superadmin"
+  const isCurrentUserAdmin =
+    currentUserRole === "admin" ||
+    currentUserRole === "superadmin" ||
+    currentUserRole === "professor"
 
   return (
     <div className="min-h-screen bg-background">
