@@ -1,5 +1,5 @@
 -- ============================================
--- Script 25: Ensure storage buckets exist
+-- Script 25: Ensure storage buckets exist (idempotent — safe to re-run)
 -- Run this in the Supabase SQL Editor to create qa-images and qa-videos buckets
 -- ============================================
 
@@ -48,12 +48,16 @@ ON CONFLICT (id) DO UPDATE SET
 -- Storage policies for qa-images
 -- ============================================
 
--- Drop all existing qa-images policies to avoid conflicts
+-- Drop legacy and script-25 qa-images policies (safe to re-run)
 DROP POLICY IF EXISTS "Authenticated users can upload images" ON storage.objects;
 DROP POLICY IF EXISTS "Public can view images" ON storage.objects;
 DROP POLICY IF EXISTS "Users can update their own images" ON storage.objects;
 DROP POLICY IF EXISTS "Users can delete their own images" ON storage.objects;
 DROP POLICY IF EXISTS "Admins can manage all images" ON storage.objects;
+DROP POLICY IF EXISTS "qa_images_insert" ON storage.objects;
+DROP POLICY IF EXISTS "qa_images_select" ON storage.objects;
+DROP POLICY IF EXISTS "qa_images_update" ON storage.objects;
+DROP POLICY IF EXISTS "qa_images_delete" ON storage.objects;
 
 -- Anyone authenticated can upload to qa-images (path must start with their userId)
 CREATE POLICY "qa_images_insert"
@@ -94,6 +98,10 @@ DROP POLICY IF EXISTS "Public can view videos" ON storage.objects;
 DROP POLICY IF EXISTS "Users can update their own videos" ON storage.objects;
 DROP POLICY IF EXISTS "Users can delete their own videos" ON storage.objects;
 DROP POLICY IF EXISTS "Admins can manage all videos" ON storage.objects;
+DROP POLICY IF EXISTS "qa_videos_insert" ON storage.objects;
+DROP POLICY IF EXISTS "qa_videos_select" ON storage.objects;
+DROP POLICY IF EXISTS "qa_videos_update" ON storage.objects;
+DROP POLICY IF EXISTS "qa_videos_delete" ON storage.objects;
 
 CREATE POLICY "qa_videos_insert"
 ON storage.objects FOR INSERT TO authenticated
@@ -127,6 +135,9 @@ USING (
 
 DROP POLICY IF EXISTS "Admins can upload event images" ON storage.objects;
 DROP POLICY IF EXISTS "Public can view event images" ON storage.objects;
+DROP POLICY IF EXISTS "event_images_insert" ON storage.objects;
+DROP POLICY IF EXISTS "event_images_select" ON storage.objects;
+DROP POLICY IF EXISTS "event_images_delete" ON storage.objects;
 
 CREATE POLICY "event_images_insert"
 ON storage.objects FOR INSERT TO authenticated
