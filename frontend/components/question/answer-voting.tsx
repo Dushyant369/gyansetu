@@ -48,29 +48,24 @@ export function AnswerVoting({
       try {
         const result = await voteAnswer(answerId, voteValue)
 
-        if (result.removed) {
-          // Vote was removed
+        if (typeof result.score === "number") {
+          setScore(result.score)
+        } else if (result.removed) {
           setScore((prev) => prev - voteValue)
-          setVote(null)
-          toast({
-            title: "Vote removed",
-            description: "Your vote has been removed.",
-          })
+        } else if (vote === null) {
+          setScore((prev) => prev + voteValue)
         } else {
-          // Vote was added or changed
-          if (vote === null) {
-            // New vote
-            setScore((prev) => prev + voteValue)
-          } else {
-            // Changed vote
-            setScore((prev) => prev - vote + voteValue)
-          }
-          setVote(voteValue)
-          toast({
-            title: voteValue === 1 ? "Upvoted" : "Downvoted",
-            description: `Answer ${voteValue === 1 ? "upvoted" : "downvoted"} successfully.`,
-          })
+          setScore((prev) => prev - vote + voteValue)
         }
+
+        setVote(result.removed ? null : voteValue)
+
+        toast({
+          title: result.removed ? "Vote removed" : voteValue === 1 ? "Upvoted" : "Downvoted",
+          description: result.removed
+            ? "Your vote has been removed."
+            : `Answer ${voteValue === 1 ? "upvoted" : "downvoted"} successfully.`,
+        })
 
         router.refresh()
       } catch (error) {

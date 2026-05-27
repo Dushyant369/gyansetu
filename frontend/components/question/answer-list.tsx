@@ -14,6 +14,7 @@ import { CheckCircle2, MessageCircleReply } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/date"
 import { AnswerVoting } from "@/components/question/answer-voting"
+import { canVoteOnAnswer } from "@/lib/votes/can-vote"
 import { ReportButton } from "@/components/question/report-button"
 import { ReplyItem } from "@/components/question/reply-item"
 import { Input } from "@/components/ui/input"
@@ -290,15 +291,14 @@ export function AnswerList({ answers: initialAnswers, isQuestionAuthor, currentU
       {answers.map((answer) => {
         const isAnswerAuthor = answer.author_id === currentUserId
         const answerAuthorRole = answer.profiles?.role || "student"
-        const isAnswerAuthorAdmin = answerAuthorRole === "admin" || answerAuthorRole === "superadmin"
-        const isCurrentUserStudent = currentUserRole === "student"
-        const isCurrentUserAdmin = currentUserRole === "admin" || currentUserRole === "superadmin"
-        
-        // Role-based voting rules
-        // Students cannot vote on admin/superadmin answers
-        // Admins cannot vote on other admin/superadmin answers
-        // No one can vote on their own answer
-        const canVote = !isAnswerAuthor && !(isCurrentUserStudent && isAnswerAuthorAdmin) && !(isCurrentUserAdmin && isAnswerAuthorAdmin)
+        const isAnswerAuthorAdmin =
+          answerAuthorRole === "admin" || answerAuthorRole === "superadmin"
+        const isCurrentUserAdmin =
+          currentUserRole === "admin" ||
+          currentUserRole === "superadmin" ||
+          currentUserRole === "professor"
+
+        const canVote = canVoteOnAnswer(answer.author_id, currentUserId)
         
         // Admins/SuperAdmins can accept any answer, question authors can accept any answer
         const canAccept = isCurrentUserAdmin || (isQuestionAuthor && !isAnswerAuthor)

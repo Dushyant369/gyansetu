@@ -61,7 +61,7 @@ export default async function QuestionPage({
     .select("vote")
     .eq("question_id", questionId)
     .eq("user_id", user.id)
-    .single()
+    .maybeSingle()
 
   const userVote = userQuestionVote?.vote || null
 

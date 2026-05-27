@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { QuestionVoting } from "@/components/question/question-voting"
 import { AnswerVoting } from "@/components/question/answer-voting"
+import { canVoteOnAnswer } from "@/lib/votes/can-vote"
 import { createReply, markBestAnswer } from "@/app/question/[id]/actions"
 import { AnswerComposer } from "@/components/question/answer-composer"
 import { AnswerMediaDisplay } from "@/components/media/answer-media-display"
@@ -410,8 +411,9 @@ export function QuestionCardExpanded({
               answers.map((answer) => {
                 const isAnswerAuthor = answer.author_id === currentUserId
                 const answerAuthorRole = answer.profiles?.role || "student"
-                const isAnswerAuthorAdmin = answerAuthorRole === "admin" || answerAuthorRole === "superadmin"
-                const canVote = !isAnswerAuthor && !(isCurrentUserStudent && isAnswerAuthorAdmin) && !(isCurrentUserAdmin && isAnswerAuthorAdmin)
+                const isAnswerAuthorAdmin =
+                  answerAuthorRole === "admin" || answerAuthorRole === "superadmin"
+                const canVote = canVoteOnAnswer(answer.author_id, currentUserId)
 
                 const isBestAnswer = question.best_answer_id === answer.id
                 const isAnswerAuthorStudent = answer.profiles?.role === "student" || !answer.profiles?.role

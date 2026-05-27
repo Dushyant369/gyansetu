@@ -53,7 +53,7 @@ export async function voteQuestion(questionId: string, voteValue: 1 | -1) {
     .select("vote")
     .eq("question_id", questionId)
     .eq("user_id", user.id)
-    .single()
+    .maybeSingle()
 
   // If user already voted the same, remove vote
   if (existingVote && existingVote.vote === voteValue) {
@@ -111,6 +111,23 @@ export async function voteQuestion(questionId: string, voteValue: 1 | -1) {
  * @param answerId - The answer ID
  * @param voteValue - 1 for upvote, -1 for downvote
  */
+async function fetchAnswerVoteScore(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  answerId: string
+): Promise<number> {
+  const { data: rpcScore, error: rpcError } = await supabase.rpc("get_answer_vote_score", {
+    answer_uuid: answerId,
+  })
+  if (!rpcError && typeof rpcScore === "number") return rpcScore
+
+  const { data: votes } = await supabase
+    .from("answer_votes")
+    .select("vote")
+    .eq("answer_id", answerId)
+
+  return votes?.reduce((sum, row) => sum + row.vote, 0) ?? 0
+}
+
 export async function voteAnswer(answerId: string, voteValue: 1 | -1) {
   const supabase = await createClient()
   const {
@@ -118,107 +135,84 @@ export async function voteAnswer(answerId: string, voteValue: 1 | -1) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/auth/login")
+    throw new Error("You must be signed in to vote")
   }
 
-  // Get current user profile
-  const { data: currentProfile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single()
-
-  const currentUserRole = currentProfile?.role || "student"
-  const isCurrentUserStudent = currentUserRole === "student"
-  const isCurrentUserAdmin = currentUserRole === "admin" || currentUserRole === "superadmin"
-
-  // Get answer with author info
-  const { data: answer } = await supabase
+  const { data: answer, error: answerError } = await supabase
     .from("answers")
-    .select("author_id, question_id, profiles!author_id(role)")
+    .select("author_id, question_id")
     .eq("id", answerId)
     .single()
 
-  if (!answer) {
+  if (answerError || !answer) {
+    console.error("voteAnswer answer lookup:", answerError)
     throw new Error("Answer not found")
   }
 
-  const answerAuthorRole = (answer.profiles as any)?.role || "student"
-  const isAnswerAuthorAdmin = answerAuthorRole === "admin" || answerAuthorRole === "superadmin"
-  const isAnswerAuthor = answer.author_id === user.id
-
-  // Validation: Cannot vote on own answer
-  if (isAnswerAuthor) {
+  if (answer.author_id === user.id) {
     throw new Error("You cannot vote on your own answer")
   }
 
-  // Role-based validation: Students cannot vote on admin/superadmin answers
-  if (isCurrentUserStudent && isAnswerAuthorAdmin) {
-    throw new Error("Students cannot vote on admin/superadmin answers")
-  }
-
-  // Admins/SuperAdmins cannot vote on other admin/superadmin answers
-  if (isCurrentUserAdmin && isAnswerAuthorAdmin) {
-    throw new Error("Admins cannot vote on other admin/superadmin answers")
-  }
-
-  // Check existing vote
-  const { data: existingVote } = await supabase
+  const { data: existingVote, error: existingError } = await supabase
     .from("answer_votes")
     .select("vote")
     .eq("answer_id", answerId)
     .eq("user_id", user.id)
-    .single()
+    .maybeSingle()
 
-  // If user already voted the same, remove vote
-  if (existingVote && existingVote.vote === voteValue) {
-    const { error } = await supabase
+  if (existingError) {
+    console.error("voteAnswer existing vote:", existingError)
+    if (existingError.code === "42P01" || existingError.message?.includes("answer_votes")) {
+      throw new Error(
+        "Voting is not set up yet. Run backend/scripts/13-add-voting-system.sql or 24-fix-critical-bugs-and-features.sql in Supabase."
+      )
+    }
+  }
+
+  if (existingVote?.vote === voteValue) {
+    const { error: deleteError } = await supabase
       .from("answer_votes")
       .delete()
       .eq("answer_id", answerId)
       .eq("user_id", user.id)
 
-    if (error) {
-      throw new Error(error.message || "Failed to remove vote")
+    if (deleteError) {
+      throw new Error(deleteError.message || "Failed to remove vote")
     }
 
-    // Update karma: remove previous vote effect
-    const karmaChange = voteValue === 1 ? -2 : 2
-    await updateAnswerAuthorKarma(answer.author_id, karmaChange, answerId)
-
+    void updateAnswerAuthorKarma(answer.author_id, voteValue === 1 ? -2 : 2, answerId)
+    const score = await fetchAnswerVoteScore(supabase, answerId)
     revalidatePath(`/question/${answer.question_id}`)
-    return { vote: null, removed: true }
+    return { vote: null, removed: true, score }
   }
 
-  // Upsert vote
-  const { error: upsertError } = await supabase
-    .from("answer_votes")
-    .upsert(
-      {
-        answer_id: answerId,
-        user_id: user.id,
-        vote: voteValue,
-      },
-      {
-        onConflict: "answer_id,user_id",
-      }
-    )
+  const { error: upsertError } = await supabase.from("answer_votes").upsert(
+    {
+      answer_id: answerId,
+      user_id: user.id,
+      vote: voteValue,
+    },
+    { onConflict: "answer_id,user_id" }
+  )
 
   if (upsertError) {
+    console.error("voteAnswer upsert:", upsertError)
+    if (upsertError.code === "42501") {
+      throw new Error("You do not have permission to vote on this answer")
+    }
     throw new Error(upsertError.message || "Failed to vote")
   }
 
-  // Update karma
   let karmaChange = voteValue
   if (existingVote) {
-    // User changed their vote, adjust karma accordingly
     karmaChange = voteValue - existingVote.vote
   }
   const karmaPoints = karmaChange === 2 ? 2 : karmaChange === -2 ? -2 : voteValue === 1 ? 2 : -2
-  await updateAnswerAuthorKarma(answer.author_id, karmaPoints, answerId)
+  void updateAnswerAuthorKarma(answer.author_id, karmaPoints, answerId)
 
+  const score = await fetchAnswerVoteScore(supabase, answerId)
   revalidatePath(`/question/${answer.question_id}`)
-  return { vote: voteValue, removed: false }
+  return { vote: voteValue, removed: false, score }
 }
 
 /**
@@ -246,9 +240,9 @@ export async function getUserAnswerVote(answerId: string, userId: string) {
     .select("vote")
     .eq("answer_id", answerId)
     .eq("user_id", userId)
-    .single()
+    .maybeSingle()
 
-  return data?.vote || null
+  return data?.vote ?? null
 }
 
 /**
@@ -282,34 +276,33 @@ async function updateQuestionAuthorKarma(authorId: string, change: number, quest
  * Helper: Update answer author karma
  */
 async function updateAnswerAuthorKarma(authorId: string, change: number, answerId: string) {
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  // Get current karma
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("karma_points")
-    .eq("id", authorId)
-    .single()
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("karma_points")
+      .eq("id", authorId)
+      .single()
 
-  const newKarma = Math.max(0, (profile?.karma_points || 0) + change)
+    const newKarma = Math.max(0, (profile?.karma_points || 0) + change)
+    await supabase.from("profiles").update({ karma_points: newKarma }).eq("id", authorId)
 
-  // Update karma
-  await supabase.from("profiles").update({ karma_points: newKarma }).eq("id", authorId)
+    const { data: answer } = await supabase
+      .from("answers")
+      .select("question_id")
+      .eq("id", answerId)
+      .single()
 
-  // Get question_id for karma log
-  const { data: answer } = await supabase
-    .from("answers")
-    .select("question_id")
-    .eq("id", answerId)
-    .single()
-
-  // Log karma change
-  await supabase.from("karma_log").insert({
-    user_id: authorId,
-    change: change,
-    reason: change > 0 ? "Answer upvoted" : "Answer downvoted",
-    related_answer_id: answerId,
-    related_question_id: answer?.question_id || null,
-  })
+    await supabase.from("karma_log").insert({
+      user_id: authorId,
+      change: change,
+      reason: change > 0 ? "Answer upvoted" : "Answer downvoted",
+      related_answer_id: answerId,
+      related_question_id: answer?.question_id || null,
+    })
+  } catch {
+    // Karma must not block voting
+  }
 }
 
