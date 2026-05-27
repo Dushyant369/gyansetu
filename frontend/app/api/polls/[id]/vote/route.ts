@@ -32,7 +32,26 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Poll has expired" }, { status: 400 })
   }
 
-  await supabase.from("poll_votes").delete().eq("poll_id", pollId).eq("user_id", auth.user!.id)
+  const { data: option } = await supabase
+    .from("poll_options")
+    .select("id")
+    .eq("id", body.option_id)
+    .eq("poll_id", pollId)
+    .maybeSingle()
+
+  if (!option) {
+    return NextResponse.json({ error: "Invalid option for this poll" }, { status: 400 })
+  }
+
+  const { error: deleteError } = await supabase
+    .from("poll_votes")
+    .delete()
+    .eq("poll_id", pollId)
+    .eq("user_id", auth.user!.id)
+
+  if (deleteError) {
+    return NextResponse.json({ error: deleteError.message }, { status: 500 })
+  }
 
   const { error } = await supabase.from("poll_votes").insert({
     poll_id: pollId,

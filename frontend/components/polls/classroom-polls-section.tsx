@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Plus, BarChart3, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { isContentManagerRole } from "@/lib/auth/content-manager-roles"
 import {
   Dialog,
   DialogContent,
@@ -15,10 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-
-const isContentManagerRole = (role: string) => {
-  return role === "ADMIN" || role === "PROFESSOR"
-}
 
 interface PollOption {
   id: string

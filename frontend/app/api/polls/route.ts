@@ -19,7 +19,11 @@ export async function GET() {
     .order("created_at", { ascending: false })
 
   if (error) {
-    return NextResponse.json({ error: "Failed to fetch polls" }, { status: 500 })
+    const hint =
+      error.code === "42P01" || error.message?.includes("polls")
+        ? " Run backend/scripts/28-ensure-polls.sql in Supabase."
+        : ""
+    return NextResponse.json({ error: (error.message ?? "Failed to fetch polls") + hint }, { status: 500 })
   }
 
   const pollIds = (polls ?? []).map((p) => p.id)
@@ -28,7 +32,9 @@ export async function GET() {
     : { data: [] }
 
   const enriched = (polls ?? []).map((poll) => {
-    const options = (poll.poll_options as { id: string; label: string }[]) ?? []
+    const options = (
+      (poll.poll_options as { id: string; label: string; sort_order?: number }[]) ?? []
+    ).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     const pollVotes = votes?.filter((v) => v.poll_id === poll.id) ?? []
     const total = pollVotes.length
     const userVote = pollVotes.find((v) => v.user_id === auth.user!.id)?.option_id ?? null
@@ -79,7 +85,12 @@ export async function POST(request: Request) {
     .single()
 
   if (pollError || !poll) {
-    return NextResponse.json({ error: pollError?.message ?? "Failed to create poll" }, { status: 500 })
+    const message = pollError?.message ?? "Failed to create poll"
+    const hint =
+      pollError?.code === "42P01" || message.includes("polls")
+        ? " Run backend/scripts/24-fix-critical-bugs-and-features.sql or 28-ensure-polls.sql in Supabase."
+        : ""
+    return NextResponse.json({ error: message + hint }, { status: 500 })
   }
 
   const optionRows = options.map((label, i) => ({
