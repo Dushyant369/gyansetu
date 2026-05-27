@@ -9,7 +9,7 @@ import {
   serializeAnswerForClient,
   type CreateAnswerMediaArg,
 } from "@/lib/answers/insert-answer"
-import { markQuestionResolvedInDb } from "@/lib/questions/resolved"
+import { markQuestionResolvedInDb, isQuestionResolved } from "@/lib/questions/resolved"
 
 export type { CreateAnswerMediaArg }
 
@@ -777,7 +777,7 @@ export async function markAsResolved(questionId: string) {
     return { resolved: false, error: "Question not found" }
   }
 
-  if (question.resolved || question.is_resolved) {
+  if (isQuestionResolved(question)) {
     return { resolved: true }
   }
 
@@ -800,7 +800,22 @@ export async function markAsResolved(questionId: string) {
 
   revalidatePath(`/question/${questionId}`)
   revalidatePath("/resolved-questions")
+  revalidatePath("/dashboard")
   revalidatePath("/admin/assigned-courses")
+
+  const { data: verified, error: verifyError } = await supabase
+    .from("questions")
+    .select("resolved, is_resolved, best_answer_id")
+    .eq("id", questionId)
+    .maybeSingle()
+
+  if (verifyError || !verified || !isQuestionResolved(verified)) {
+    return {
+      resolved: false,
+      error: "Resolved status did not persist. Run backend/scripts/30-fix-resolved-questions.sql in Supabase.",
+    }
+  }
+
   return { resolved: true }
 }
 

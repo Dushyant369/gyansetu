@@ -8,7 +8,9 @@ import { CheckCircle2, BookOpen, ArrowLeft } from "lucide-react"
 import { formatRelativeTime } from "@/lib/date"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Button } from "@/components/ui/button"
-import { fetchResolvedQuestions, isQuestionResolved } from "@/lib/questions/resolved"
+import { fetchResolvedQuestions, type ResolvedQuestionRow } from "@/lib/questions/resolved"
+
+export const dynamic = "force-dynamic"
 
 export default async function ResolvedQuestionsPage() {
   const supabase = await createClient()
@@ -26,9 +28,9 @@ export default async function ResolvedQuestionsPage() {
     console.error("Error fetching resolved questions:", questionsError)
   }
 
-  const questions = (rawQuestions ?? []).filter((q) => isQuestionResolved(q))
+  const questions = rawQuestions ?? []
 
-  const grouped: Record<string, typeof questions> = {}
+  const grouped: Record<string, ResolvedQuestionRow[]> = {}
 
   questions.forEach((q) => {
     const course = Array.isArray(q.courses) ? q.courses[0] : q.courses

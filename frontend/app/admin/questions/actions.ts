@@ -114,6 +114,7 @@ export async function markQuestionResolved(questionId: string, resolved: boolean
 
   revalidatePath("/admin/assigned-courses")
   revalidatePath("/resolved-questions")
+  revalidatePath("/dashboard")
   revalidatePath("/dashboard/questions")
   revalidatePath(`/question/${questionId}`)
   revalidatePath(`/dashboard/questions/${questionId}`)

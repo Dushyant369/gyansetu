@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server"
 import { Card } from "@/components/ui/card"
 import { MessageSquare } from "lucide-react"
 import { formatRelativeTime } from "@/lib/date"
+import { isQuestionUnresolved } from "@/lib/questions/resolved"
+
+export const dynamic = "force-dynamic"
 
 export async function RecentQuestions() {
   const supabase = await createClient()
@@ -14,14 +17,18 @@ export async function RecentQuestions() {
       id,
       title,
       created_at,
+      resolved,
+      is_resolved,
+      best_answer_id,
+      accepted_answer_id,
       profiles!author_id (display_name),
       courses (name)
     `
     )
     .order("created_at", { ascending: false })
-    .limit(5)
+    .limit(20)
 
-  const items = questions ?? []
+  const items = (questions ?? []).filter(isQuestionUnresolved).slice(0, 5)
 
   return (
     <section className="space-y-4">
@@ -40,7 +47,7 @@ export async function RecentQuestions() {
 
       {items.length === 0 ? (
         <Card className="p-8 text-center">
-          <p className="text-muted-foreground">No questions yet. Be the first to ask!</p>
+          <p className="text-muted-foreground">No open questions yet. Be the first to ask!</p>
           <Link href="/dashboard/questions/new" className="text-sm text-primary hover:underline mt-2 inline-block">
             Ask a question
           </Link>

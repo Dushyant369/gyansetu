@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Plus, BookOpen, User, Settings, MessageSquare, HelpCircle, Lightbulb, CheckCircle2 } from "lucide-react"
 import { KarmaLeaderboard } from "@/components/dashboard/karma-leaderboard"
 import { RecentQuestions } from "@/components/dashboard/recent-questions"
+import { ResolvedQuestionsPreview } from "@/components/dashboard/resolved-questions-preview"
 import { RecentNotifications } from "@/components/dashboard/recent-notifications"
 import { CampusEventsSection } from "@/components/events/campus-events-section"
 import { LecturesSection } from "@/components/lectures/lectures-section"
@@ -80,6 +81,8 @@ export default async function DashboardPage() {
           </div>
 
           <RecentQuestions />
+
+          <ResolvedQuestionsPreview />
 
           <CampusEventsSection userRole={userProfile.role} />
 
