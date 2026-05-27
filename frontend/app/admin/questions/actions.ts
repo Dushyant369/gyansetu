@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { markQuestionResolvedInDb } from "@/lib/questions/resolved"
 
 export async function deleteQuestion(questionId: string) {
   const supabase = await createClient()
@@ -106,32 +107,9 @@ export async function markQuestionResolved(questionId: string, resolved: boolean
   }
   // If question has no course, any admin can manage it
 
-  const updatePayload = resolved
-    ? {
-        is_resolved: true,
-        resolved: true,
-        resolved_at: new Date().toISOString(),
-        resolved_by: user.id,
-      }
-    : {
-        is_resolved: false,
-        resolved: false,
-        resolved_at: null,
-        resolved_by: null,
-      }
-
-  const { data: updated, error } = await supabase
-    .from("questions")
-    .update(updatePayload)
-    .eq("id", questionId)
-    .select("id")
-
-  if (error) {
-    throw new Error(error.message || "Failed to update question")
-  }
-
-  if (!updated || updated.length === 0) {
-    throw new Error("You do not have permission to update this question")
+  const result = await markQuestionResolvedInDb(supabase, questionId, resolved, user.id)
+  if (!result.success) {
+    throw new Error(result.error)
   }
 
   revalidatePath("/admin/assigned-courses")

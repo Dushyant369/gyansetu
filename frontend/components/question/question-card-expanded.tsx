@@ -519,7 +519,11 @@ export function QuestionCardExpanded({
                             <MessageSquareReply className="w-4 h-4" />
                             Reply
                           </Button>
-                          <ReportButton answerId={answer.id} currentUserId={currentUserId} />
+                          <ReportButton
+                            questionId={question.id}
+                            answerId={answer.id}
+                            currentUserId={currentUserId}
+                          />
                         </div>
 
                         {replyVisibility[answer.id] && (

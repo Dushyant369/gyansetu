@@ -9,6 +9,7 @@ import {
   serializeAnswerForClient,
   type CreateAnswerMediaArg,
 } from "@/lib/answers/insert-answer"
+import { markQuestionResolvedInDb } from "@/lib/questions/resolved"
 
 export type { CreateAnswerMediaArg }
 
@@ -756,58 +757,45 @@ export async function markAsResolved(questionId: string) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/auth/login")
+    return { resolved: false, error: "You must be signed in" }
   }
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
   const userRole = profile?.role || "student"
 
   if (userRole !== "admin" && userRole !== "superadmin" && userRole !== "professor") {
-    throw new Error("Only admins and professors can mark questions as resolved")
+    return { resolved: false, error: "Only admins and professors can mark questions as resolved" }
   }
 
   const { data: question } = await supabase
     .from("questions")
-    .select("resolved, is_resolved, author_id, title, course_id")
+    .select("resolved, is_resolved, author_id, title")
     .eq("id", questionId)
     .single()
 
   if (!question) {
-    throw new Error("Question not found")
+    return { resolved: false, error: "Question not found" }
   }
 
-  const alreadyResolved = question.resolved || question.is_resolved
-  if (alreadyResolved) {
+  if (question.resolved || question.is_resolved) {
     return { resolved: true }
   }
 
-  const now = new Date().toISOString()
-  const { data: updated, error } = await supabase
-    .from("questions")
-    .update({
-      resolved: true,
-      is_resolved: true,
-      resolved_at: now,
-      resolved_by: user.id,
-    })
-    .eq("id", questionId)
-    .select("id")
-
-  if (error) {
-    throw new Error(error.message || "Failed to update resolved status")
-  }
-
-  if (!updated || updated.length === 0) {
-    throw new Error("You do not have permission to mark this question as resolved")
+  const result = await markQuestionResolvedInDb(supabase, questionId, true, user.id)
+  if (!result.success) {
+    return { resolved: false, error: result.error }
   }
 
   if (question.author_id !== user.id) {
-    await supabase.from("notifications").insert({
-      user_id: question.author_id,
-      message: `Your question "${question.title.substring(0, 50)}" was marked as resolved!`,
-      type: "resolved",
-      related_question_id: questionId,
-    })
+    void supabase
+      .from("notifications")
+      .insert({
+        user_id: question.author_id,
+        message: `Your question "${question.title.substring(0, 50)}" was marked as resolved!`,
+        type: "resolved",
+        related_question_id: questionId,
+      })
+      .then(() => {})
   }
 
   revalidatePath(`/question/${questionId}`)

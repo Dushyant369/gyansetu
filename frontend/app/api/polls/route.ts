@@ -46,7 +46,16 @@ export async function GET() {
         percent: total > 0 ? Math.round((count / total) * 100) : 0,
       }
     })
-    return { ...poll, options: results, totalVotes: total, userVoteOptionId: userVote }
+    return {
+      id: poll.id,
+      question: poll.question,
+      created_by: poll.created_by as string,
+      expires_at: poll.expires_at,
+      options: results,
+      totalVotes: total,
+      userVoteOptionId: userVote,
+      isOwnPoll: poll.created_by === auth.user!.id,
+    }
   })
 
   return NextResponse.json({ polls: enriched })

@@ -47,26 +47,28 @@ export function ReportButton({ questionId, answerId, replyId, currentUserId, var
     }
 
     startTransition(async () => {
-      try {
-        await reportContent({
-          questionId: questionId || undefined,
-          answerId: answerId || undefined,
-          replyId: replyId || undefined,
-          reason: reason.trim(),
-        })
-        toast({
-          title: "Report submitted",
-          description: "Thank you for your report. Our moderators will review it shortly.",
-        })
-        setOpen(false)
-        setReason("")
-      } catch (error) {
+      const result = await reportContent({
+        questionId: questionId || undefined,
+        answerId: answerId || undefined,
+        replyId: replyId || undefined,
+        reason: reason.trim(),
+      })
+
+      if (!result.success) {
         toast({
           title: "Error",
-          description: error instanceof Error ? error.message : "Failed to submit report",
+          description: result.error,
           variant: "destructive",
         })
+        return
       }
+
+      toast({
+        title: "Report submitted",
+        description: "Thank you for your report. Our moderators will review it shortly.",
+      })
+      setOpen(false)
+      setReason("")
     })
   }
 

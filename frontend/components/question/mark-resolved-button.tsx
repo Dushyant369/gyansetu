@@ -34,7 +34,11 @@ export function MarkResolvedButton({ questionId, isResolved: initialResolved, cu
       try {
         const result = await markAsResolved(questionId)
         if (!result.resolved) {
-          throw new Error("Could not mark question as resolved. Check your permissions.")
+          throw new Error(
+            "error" in result && result.error
+              ? result.error
+              : "Could not mark question as resolved. Check your permissions."
+          )
         }
         setResolved(true)
         toast({

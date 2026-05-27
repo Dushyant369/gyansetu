@@ -460,7 +460,11 @@ export function AnswerList({ answers: initialAnswers, isQuestionAuthor, currentU
                     <MessageCircleReply className="w-4 h-4" />
                     Reply
                   </Button>
-                  <ReportButton answerId={answer.id} currentUserId={currentUserId} />
+                  <ReportButton
+                    questionId={questionId}
+                    answerId={answer.id}
+                    currentUserId={currentUserId}
+                  />
                 </div>
                 <div
                   className="text-sm text-muted-foreground ml-auto"

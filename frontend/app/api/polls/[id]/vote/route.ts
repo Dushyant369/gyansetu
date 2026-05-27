@@ -24,12 +24,19 @@ export async function POST(request: Request, context: RouteContext) {
 
   const supabase = await createClient()
 
-  const { data: poll } = await supabase.from("polls").select("expires_at").eq("id", pollId).single()
+  const { data: poll } = await supabase
+    .from("polls")
+    .select("expires_at, created_by")
+    .eq("id", pollId)
+    .single()
   if (!poll) {
     return NextResponse.json({ error: "Poll not found" }, { status: 404 })
   }
   if (poll.expires_at && new Date(poll.expires_at) < new Date()) {
     return NextResponse.json({ error: "Poll has expired" }, { status: 400 })
+  }
+  if (poll.created_by === auth.user!.id) {
+    return NextResponse.json({ error: "You cannot vote in your own poll" }, { status: 403 })
   }
 
   const { data: option } = await supabase

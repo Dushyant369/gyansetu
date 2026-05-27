@@ -85,7 +85,7 @@ export default async function DashboardPage() {
 
           <LecturesSection userRole={userProfile.role} />
 
-          <ClassroomPollsSection userRole={userProfile.role} />
+          <ClassroomPollsSection userRole={userProfile.role} currentUserId={userProfile.id} />
 
           <RecentNotifications userId={user.id} />
 

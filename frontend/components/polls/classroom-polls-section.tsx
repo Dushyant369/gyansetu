@@ -27,18 +27,22 @@ interface PollOption {
 interface Poll {
   id: string
   question: string
+  created_by?: string
   options: PollOption[]
   totalVotes: number
   userVoteOptionId: string | null
   expires_at: string | null
+  isOwnPoll?: boolean
 }
 
 interface ClassroomPollsSectionProps {
   userRole: string
+  currentUserId: string
 }
 
 export function ClassroomPollsSection({
   userRole,
+  currentUserId,
 }: ClassroomPollsSectionProps) {
   const canManage = isContentManagerRole(userRole)
 
@@ -263,7 +267,11 @@ export function ClassroomPollsSection({
         </Card>
       ) : (
         <div className="space-y-4">
-          {polls.map((poll) => (
+          {polls.map((poll) => {
+            const isOwnPoll =
+              poll.isOwnPoll === true ||
+              (poll.created_by != null && poll.created_by === currentUserId)
+            return (
             <Card
               key={poll.id}
               className="p-4 space-y-3"
@@ -289,14 +297,20 @@ export function ClassroomPollsSection({
                 {poll.totalVotes} vote(s)
               </p>
 
+              {isOwnPoll && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
+                  You cannot vote in your own poll. Results are shown below.
+                </p>
+              )}
+
               <div className="space-y-2">
                 {poll.options.map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
-                    disabled={votingId === poll.id}
+                    disabled={votingId === poll.id || isOwnPoll}
                     onClick={() =>
-                      handleVote(poll.id, opt.id)
+                      !isOwnPoll && handleVote(poll.id, opt.id)
                     }
                     className={cn(
                       "w-full text-left rounded-lg border p-3 transition-colors",
@@ -325,7 +339,8 @@ export function ClassroomPollsSection({
                 ))}
               </div>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 

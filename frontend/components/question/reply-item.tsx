@@ -174,6 +174,7 @@ export function ReplyItem({ reply, questionId, currentUserId, currentUserRole }:
                 </Button>
               )}
               <ReportButton
+                questionId={questionId}
                 replyId={reply.id}
                 currentUserId={currentUserId}
                 size="sm"

@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast"
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/date"
 import { MessageSquareReply } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { isQuestionResolved } from "@/lib/questions/resolved"
 
 interface Answer {
   id: string
@@ -46,7 +47,8 @@ interface Question {
   id: string
   title: string
   content: string | null
-  is_resolved: boolean
+  is_resolved?: boolean
+  resolved?: boolean
   views: number
   upvotes: number
   downvotes: number
@@ -125,8 +127,11 @@ export function AssignedCoursesView({ courses }: AssignedCoursesViewProps) {
                   .order("is_accepted", { ascending: false })
                   .order("created_at", { ascending: true })
 
+                const resolved = isQuestionResolved(question)
                 return {
                   ...question,
+                  is_resolved: resolved,
+                  resolved,
                   answers: answers || [],
                 }
               })
@@ -254,14 +259,16 @@ export function AssignedCoursesView({ courses }: AssignedCoursesViewProps) {
               {/* Questions List */}
               {questions.length > 0 ? (
                 <div className="space-y-4">
-                  {questions.map((question) => (
+                  {questions.map((question) => {
+                    const questionResolved = isQuestionResolved(question)
+                    return (
                     <div key={question.id} className="border border-border rounded-lg p-4 space-y-4">
                       {/* Question Header */}
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <h4 className="font-semibold text-foreground">{question.title}</h4>
-                            {question.is_resolved && (
+                            {questionResolved && (
                               <Badge className="bg-green-500/20 text-green-700 dark:text-green-400">Resolved</Badge>
                             )}
                           </div>
@@ -292,12 +299,12 @@ export function AssignedCoursesView({ courses }: AssignedCoursesViewProps) {
                             {answerVisibility[question.id] ? "Cancel" : "Answer"}
                           </Button>
                           <Button
-                            variant={question.is_resolved ? "outline" : "secondary"}
+                            variant={questionResolved ? "outline" : "secondary"}
                             size="sm"
-                            onClick={() => handleToggleResolved(question.id, question.is_resolved)}
+                            onClick={() => handleToggleResolved(question.id, questionResolved)}
                             disabled={isPending}
                           >
-                            {question.is_resolved ? "Mark Unresolved" : "Mark Resolved"}
+                            {questionResolved ? "Mark Unresolved" : "Mark Resolved"}
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -382,7 +389,8 @@ export function AssignedCoursesView({ courses }: AssignedCoursesViewProps) {
                         </div>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <p className="text-muted-foreground text-center py-8">No questions for this course yet.</p>
