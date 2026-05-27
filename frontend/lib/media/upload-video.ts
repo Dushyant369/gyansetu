@@ -29,17 +29,24 @@ export async function uploadAnswerVideo(
   onProgress?.(5)
 
   const supabase = createClient()
-  const fileExt = file.name.split(".").pop() || "mp4"
+  const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp4"
+  // Path MUST start with userId to satisfy RLS: auth.uid() = foldername(name)[1]
   const filePath = `${userId}/${IMAGE_ANSWER_PREFIX}/${userId}-video-${Date.now()}.${fileExt}`
 
   onProgress?.(25)
 
   const { error: uploadError } = await supabase.storage.from(VIDEO_BUCKET).upload(filePath, file, {
     cacheControl: "3600",
-    upsert: false,
+    upsert: true,
+    contentType: file.type,
   })
 
   if (uploadError) {
+    if (uploadError.message?.toLowerCase().includes("bucket")) {
+      throw new Error(
+        `Storage bucket "${VIDEO_BUCKET}" not found. Please run script 25-ensure-storage-buckets.sql in your Supabase SQL editor to create the required storage buckets.`
+      )
+    }
     throw new Error(uploadError.message || "Failed to upload video")
   }
 

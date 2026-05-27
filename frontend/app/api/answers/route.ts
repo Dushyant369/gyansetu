@@ -65,11 +65,10 @@ export async function POST(request: Request) {
     .insert({
       question_id: questionId,
       author_id: user.id,
-      content: trimmedContent,
-      upvoted_by: [],
+      content: trimmedContent || "",
       ...mediaFields,
     })
-    .select()
+    .select("id, question_id, author_id, content, is_accepted, created_at, updated_at")
     .single()
 
   if (error) {
@@ -78,14 +77,27 @@ export async function POST(request: Request) {
   }
 
   if (question.author_id !== user.id) {
-    await supabase.from("notifications").insert({
-      user_id: question.author_id,
-      message: `Your question "${question.title.substring(0, 50)}" received a new answer`,
-      type: "answer",
-      related_question_id: questionId,
-      related_answer_id: data.id,
-    })
+    // Fire-and-forget notification
+    void Promise.resolve(
+      supabase.from("notifications").insert({
+        user_id: question.author_id,
+        message: `Your question "${question.title.substring(0, 50)}" received a new answer`,
+        type: "answer",
+        related_question_id: questionId,
+        related_answer_id: data.id,
+      })
+    ).catch(() => {})
   }
 
-  return NextResponse.json({ answer: data }, { status: 201 })
+  return NextResponse.json({
+    answer: {
+      id: data.id,
+      question_id: data.question_id,
+      author_id: data.author_id,
+      content: data.content,
+      is_accepted: data.is_accepted,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    }
+  }, { status: 201 })
 }

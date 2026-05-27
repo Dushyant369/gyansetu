@@ -81,11 +81,10 @@ export async function createAnswer(
     .insert({
       question_id: questionId,
       author_id: user.id,
-      content: trimmedContent,
-      upvoted_by: [],
+      content: trimmedContent || "",
       ...mediaFields,
     })
-    .select()
+    .select("id, question_id, author_id, content, is_accepted, created_at, updated_at")
     .single()
 
   if (error) {
@@ -105,19 +104,33 @@ export async function createAnswer(
     throw new Error("Answer was not created. Please try again.")
   }
 
-  // Create notification for question author
+  // Create notification for question author (fire-and-forget, don't crash on failure)
   if (question.author_id !== user.id) {
-    await supabase.from("notifications").insert({
-      user_id: question.author_id,
-      message: `Your question "${question.title.substring(0, 50)}" received a new answer`,
-      type: "answer",
-      related_question_id: questionId,
-      related_answer_id: data.id,
-    })
+    void Promise.resolve(
+      supabase.from("notifications").insert({
+        user_id: question.author_id,
+        message: `Your question "${question.title.substring(0, 50)}" received a new answer`,
+        type: "answer",
+        related_question_id: questionId,
+        related_answer_id: data.id,
+      })
+    ).catch(() => {})
   }
 
   revalidatePath(`/question/${questionId}`)
-  return data
+
+  // Return only plain serializable fields – never return the raw DB row directly
+  // as it may contain Date objects or other non-serializable values that crash
+  // Next.js Server Action serialization.
+  return {
+    id: data.id as string,
+    question_id: data.question_id as string,
+    author_id: data.author_id as string,
+    content: (data.content as string) ?? "",
+    is_accepted: Boolean(data.is_accepted),
+    created_at: String(data.created_at ?? ""),
+    updated_at: String(data.updated_at ?? ""),
+  }
 }
 
 export async function createReply(answerId: string, questionId: string, content: string, imageUrl?: string | null) {
@@ -169,14 +182,16 @@ export async function createReply(answerId: string, questionId: string, content:
       .eq("id", answer.question_id)
       .single()
 
-    await supabase.from("notifications").insert({
-      user_id: answer.author_id,
-      message: `Your answer received a new reply${question ? ` on "${question.title.substring(0, 30)}"` : ""}`,
-      type: "reply",
-      related_question_id: questionId,
-      related_answer_id: answerId,
-      metadata: { reply_id: data.id },
-    })
+    // Fire-and-forget — don't block reply creation on notification
+    void Promise.resolve(
+      supabase.from("notifications").insert({
+        user_id: answer.author_id,
+        message: `Your answer received a new reply${question ? ` on "${question.title.substring(0, 30)}"` : ""}`,
+        type: "reply",
+        related_question_id: questionId,
+        related_answer_id: answerId,
+      })
+    ).catch(() => {})
   }
 
   revalidatePath(`/question/${questionId}`)

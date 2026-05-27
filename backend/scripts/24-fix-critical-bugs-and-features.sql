@@ -174,6 +174,7 @@ USING (
 );
 
 -- Accept answer: keep is_accepted in sync with questions.accepted_answer_id
+-- Uses pg_trigger_depth() guard to prevent recursive trigger calls
 CREATE OR REPLACE FUNCTION sync_accepted_answer_on_question()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -181,15 +182,26 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  -- Guard against recursive trigger calls
+  IF pg_trigger_depth() > 1 THEN
+    RETURN NEW;
+  END IF;
+
   IF TG_OP = 'UPDATE' AND NEW.is_accepted IS DISTINCT FROM OLD.is_accepted THEN
     IF NEW.is_accepted THEN
+      -- Unaccept other answers for this question (pg_trigger_depth guard prevents re-entry)
       UPDATE answers SET is_accepted = false
       WHERE question_id = NEW.question_id AND id <> NEW.id AND is_accepted = true;
+
+      -- Mark question as resolved with accepted answer
       UPDATE questions
-      SET accepted_answer_id = NEW.id, resolved = true, is_resolved = true,
+      SET accepted_answer_id = NEW.id,
+          resolved = true,
+          is_resolved = true,
           resolved_at = COALESCE(resolved_at, NOW())
       WHERE id = NEW.question_id;
     ELSE
+      -- Clear accepted answer reference from question
       UPDATE questions
       SET accepted_answer_id = NULL
       WHERE id = NEW.question_id AND accepted_answer_id = NEW.id;
